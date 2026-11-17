@@ -61,6 +61,8 @@ from src.core.launcher import get_smapi_log_path, launch_game, validate_game_pat
 from src.core.mod_installer import install_mod_zip
 from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
+from src.core.nexus_installer import install_from_nexus
+from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -404,7 +406,19 @@ class SVModManagerApp(ctk.CTk):
             modpack_dir=self._active_modpack_dir(),
             on_save_api_key=self._save_nexus_api_key,
             on_installed=lambda folders: self._on_install_complete(active, folders, None),
+            on_register_nxm=self._register_nxm_handler,
         )
+
+    def _register_nxm_handler(self) -> None:
+        try:
+            cmd = build_nxm_command(IS_FROZEN, PROJECT_ROOT)
+            register_nxm_protocol(cmd)
+            messagebox.showinfo(
+                "nxm:// Registered",
+                "Registered SVModManager for 'Mod Manager Download' (nxm://) links on Nexus Mods!",
+            )
+        except OSError as exc:
+            messagebox.showerror("Registration Failed", str(exc))
 
     def _save_nexus_api_key(self, api_key: str) -> None:
         if api_key != self.config_manager.nexus_api_key:
@@ -570,7 +584,26 @@ class SVModManagerApp(ctk.CTk):
 def main() -> None:
     """Initialize theme and run the Stardew Valley Mod Manager GUI."""
     ctk.set_default_color_theme("blue")
+    nxm_status: tuple[str, str] | None = None
+    if len(sys.argv) > 1 and sys.argv[1].lower().startswith("nxm://"):
+        cfg = ConfigManager(CONFIG_FILE)
+        active = cfg.active_profile
+        modpack_dir = MODPACKS_DIR / active
+        try:
+            installed = install_from_nexus(sys.argv[1], cfg.nexus_api_key, modpack_dir)
+            current = cfg.get_enabled_mods(active)
+            cfg.set_enabled_mods(current + installed, active)
+            nxm_status = (
+                f"Installed {', '.join(installed)} via nxm:// into '{active}'.",
+                "success",
+            )
+        except (OSError, ValueError) as exc:
+            nxm_status = (f"nxm:// install failed: {exc}", "error")
+
     app = SVModManagerApp()
+    if nxm_status is not None:
+        msg, level = nxm_status
+        app.after(300, lambda: app.launch_bar.set_status(msg, level=level))
     app.mainloop()
 
 

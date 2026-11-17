@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import io
 import threading
+import time
 import urllib.error
 import webbrowser
+import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox
@@ -13,6 +15,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 from PIL import Image
 
+from src.core.mod_installer import install_mod_zip
 from src.core.nexus_browser import (
     BrowseSort,
     NexusModSummary,
@@ -34,6 +37,7 @@ class NexusBrowserDialog(ctk.CTkToplevel):
         modpack_dir: Path,
         on_save_api_key: Callable[[str], None],
         on_installed: Callable[[list[str]], None],
+        on_register_nxm: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master)
         self.title("Browse Nexus Mods — Stardew Valley")
@@ -45,6 +49,8 @@ class NexusBrowserDialog(ctk.CTkToplevel):
         self._modpack_dir = modpack_dir
         self._on_save_api_key = on_save_api_key
         self._on_installed = on_installed
+        self._on_register_nxm = on_register_nxm
+        self._watch_gen = 0
         self._request_gen = 0
         self._page = 1
         self._per_page = 25
@@ -88,8 +94,17 @@ class NexusBrowserDialog(ctk.CTkToplevel):
         self.key_entry.bind("<FocusOut>", lambda _e: self._save_key())
 
         ctk.CTkButton(header, text="Save Key", width=84, command=self._save_key).grid(
-            row=0, column=2, padx=(0, SPACING["md"]), pady=(SPACING["md"], 4)
+            row=0, column=2, padx=(0, 6), pady=(SPACING["md"], 4)
         )
+        if self._on_register_nxm is not None:
+            ctk.CTkButton(
+                header,
+                text="Register nxm://",
+                width=112,
+                fg_color=COLORS["neutral_btn"],
+                hover_color=COLORS["neutral_btn_hover"],
+                command=self._handle_register_nxm,
+            ).grid(row=0, column=3, padx=(0, SPACING["md"]), pady=(SPACING["md"], 4))
 
         ctk.CTkLabel(header, text="Search:", font=font_bold()).grid(
             row=1,
@@ -107,7 +122,12 @@ class NexusBrowserDialog(ctk.CTkToplevel):
         self.search_entry.bind("<Return>", lambda _e: self._start_search())
 
         ctk.CTkButton(header, text="Search", width=84, command=self._start_search).grid(
-            row=1, column=2, padx=(0, SPACING["md"]), pady=(4, SPACING["md"])
+            row=1,
+            column=2,
+            columnspan=2,
+            sticky="ew",
+            padx=(0, SPACING["md"]),
+            pady=(4, SPACING["md"]),
         )
 
         # --- Category Tabs & Per-Page Selector ---
@@ -435,11 +455,73 @@ class NexusBrowserDialog(ctk.CTkToplevel):
 
         if isinstance(err, NexusForbiddenError):
             open_page = messagebox.askyesno(
-                "Nexus Premium Required for 1-Click",
-                f"{err}\n\nOpen '{mod_name}' Files page in your browser to download manually?",
+                "Free Nexus Account — Browser Download",
+                f"{err}\n\n"
+                f"Open '{mod_name}' Files page in your browser and auto-install "
+                "the .zip when it finishes downloading?",
                 parent=self,
             )
             if open_page:
+                self._watch_downloads_and_install(mod_id, mod_name)
                 webbrowser.open(f"https://www.nexusmods.com/stardewvalley/mods/{mod_id}?tab=files")
         else:
             messagebox.showerror("Install Failed", str(err), parent=self)
+
+    def _handle_register_nxm(self) -> None:
+        if self._on_register_nxm is not None:
+            self._on_register_nxm()
+
+    def _watch_downloads_and_install(self, mod_id: str, mod_name: str) -> None:
+        downloads_dir = Path.home() / "Downloads"
+        if not downloads_dir.is_dir():
+            return
+
+        self._watch_gen += 1
+        watch_gen = self._watch_gen
+        existing_zips = {p.resolve() for p in downloads_dir.glob("*.zip")}
+        started_at = time.time()
+
+        btn = self._install_buttons.get(mod_id)
+        if btn and btn.winfo_exists():
+            btn.configure(state="disabled", text="Waiting...")
+        self.status_label.configure(
+            text=f"Waiting for '{mod_name}' .zip in Downloads...",
+            text_color=COLORS["warning_text"],
+        )
+
+        def poll() -> None:
+            if watch_gen != self._watch_gen or not self.winfo_exists():
+                return
+            if time.time() - started_at > 180:
+                if btn and btn.winfo_exists():
+                    btn.configure(state="normal", text="Install")
+                self.status_label.configure(
+                    text="Download watch timed out.", text_color=COLORS["text_muted"]
+                )
+                return
+
+            new_zips = [
+                p
+                for p in downloads_dir.glob("*.zip")
+                if p.resolve() not in existing_zips and p.stat().st_mtime >= started_at - 2
+            ]
+            for candidate in new_zips:
+                if zipfile.is_zipfile(candidate):
+                    self._install_downloaded_zip(mod_id, candidate)
+                    return
+
+            self.after(1500, poll)
+
+        self.after(1500, poll)
+
+    def _install_downloaded_zip(self, mod_id: str, zip_path: Path) -> None:
+        def worker() -> None:
+            try:
+                installed = install_mod_zip(zip_path, self._modpack_dir)
+                err: Exception | None = None
+            except (OSError, ValueError) as exc:
+                installed = []
+                err = exc
+            self.after(0, lambda: self._on_install_done(mod_id, zip_path.stem, installed, err))
+
+        threading.Thread(target=worker, daemon=True).start()
