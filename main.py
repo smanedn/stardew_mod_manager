@@ -61,7 +61,6 @@ from src.core.launcher import get_smapi_log_path, launch_game, validate_game_pat
 from src.core.mod_installer import install_mod_zip
 from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
-from src.core.nexus_installer import install_from_nexus
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -398,42 +397,18 @@ class SVModManagerApp(ctk.CTk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _open_nexus_dialog(self) -> None:
+        active = self.config_manager.active_profile
         NexusBrowserDialog(
             self,
             initial_api_key=self.config_manager.nexus_api_key,
+            modpack_dir=self._active_modpack_dir(),
             on_save_api_key=self._save_nexus_api_key,
-            on_install_mod=self._install_nexus,
+            on_installed=lambda folders: self._on_install_complete(active, folders, None),
         )
 
     def _save_nexus_api_key(self, api_key: str) -> None:
         if api_key != self.config_manager.nexus_api_key:
             self.config_manager.nexus_api_key = api_key
-
-    def _install_nexus(self, raw_target: str, api_key: str) -> None:
-        if api_key != self.config_manager.nexus_api_key:
-            self.config_manager.nexus_api_key = api_key
-
-        if not raw_target:
-            self.launch_bar.set_status(
-                "Nexus install cancelled: no URL/ID entered.", level="warning"
-            )
-            return
-
-        active = self.config_manager.active_profile
-        modpack_dir = self._active_modpack_dir()
-        self.mod_list.set_loading(True, "Downloading from Nexus Mods...")
-        self.launch_bar.set_status("Downloading mod from Nexus Mods...", level="info")
-
-        def worker() -> None:
-            try:
-                installed = install_from_nexus(raw_target, api_key, modpack_dir)
-                err = None
-            except (OSError, ValueError) as exc:
-                installed = []
-                err = str(exc)
-            self.after(0, lambda: self._on_install_complete(active, installed, err))
-
-        threading.Thread(target=worker, daemon=True).start()
 
     def _on_install_complete(
         self, profile_id: str, installed: list[str], error: str | None

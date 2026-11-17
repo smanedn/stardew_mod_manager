@@ -9,6 +9,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,10 @@ _NEXUS_API_BASE = "https://api.nexusmods.com/v1/games/stardewvalley"
 _NEXUS_URL_RE = re.compile(
     r"(?:https?://)?(?:www\.)?nexusmods\.com/stardewvalley/mods/(\d+)", re.IGNORECASE
 )
+
+
+class NexusForbiddenError(ValueError):
+    """Raised when Nexus Mods denies direct API download (e.g. non-Premium account)."""
 
 
 @dataclass(frozen=True)
@@ -78,9 +83,10 @@ def _nexus_get_json(url: str, api_key: str, timeout: float = 15.0) -> Any:
         if exc.code == 401:
             raise ValueError("Invalid Nexus Mods API key (HTTP 401).") from exc
         if exc.code == 403:
-            raise ValueError(
+            raise NexusForbiddenError(
                 "Nexus Mods API denied direct download (HTTP 403). "
-                "Free accounts must paste an nxm:// Mod Manager Download link."
+                "Direct 1-click downloads require Nexus Premium; free accounts can download "
+                "from the mod's Files page in your browser and install via 'Install .zip'."
             ) from exc
         if exc.code == 404:
             raise ValueError("Mod or file not found on Nexus Mods (HTTP 404).") from exc
@@ -154,5 +160,11 @@ def install_from_nexus(
         req = urllib.request.Request(cdn_url, headers={"User-Agent": "SVMM-NexusInstaller"})
         with urllib.request.urlopen(req, timeout=timeout) as resp, archive_path.open("wb") as dst:
             shutil.copyfileobj(resp, dst)
+
+        if not zipfile.is_zipfile(archive_path):
+            raise ValueError(
+                "Downloaded archive is not a .zip file (e.g. .7z or .rar). "
+                "Please download and extract it manually into your modpack folder."
+            )
 
         return install_mod_zip(archive_path, modpack_dir)

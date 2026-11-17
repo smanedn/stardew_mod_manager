@@ -7,7 +7,12 @@ from typing import Any
 
 import pytest
 
-from src.core.nexus_browser import fetch_nexus_category, search_nexus_mods
+from src.core.nexus_browser import (
+    browse_nexus_mods,
+    fetch_nexus_category,
+    fetch_nexus_thumbnail,
+    search_nexus_mods,
+)
 
 
 class _FakeResp:
@@ -92,3 +97,37 @@ def test_fetch_nexus_category_handles_401(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(urllib.request, "urlopen", raise_401)
     with pytest.raises(ValueError, match="HTTP 401"):
         fetch_nexus_category("latest_updated", "bad-key")
+
+
+def test_browse_nexus_mods_clamps_pagination_and_parses_picture_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_urlopen(req: urllib.request.Request, timeout: float = 15.0) -> Any:
+        body = json.loads((req.data or b"{}").decode("utf-8"))
+        assert body["variables"]["count"] == 100
+        assert body["variables"]["offset"] == 50
+        return _FakeResp(
+            {
+                "data": {
+                    "mods": {
+                        "nodes": [
+                            {
+                                "modId": 1915,
+                                "name": "Content Patcher",
+                                "summary": "Loads content packs.",
+                                "author": "Pathoschild",
+                                "version": "2.0.0",
+                                "endorsements": 50000,
+                                "pictureUrl": "https://staticdelivery.nexusmods.com/mods/1303/images/1915.png",
+                            }
+                        ]
+                    }
+                }
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    mods = browse_nexus_mods(sort_by="endorsements", count=200, offset=50)
+    assert len(mods) == 1
+    assert mods[0].picture_url.startswith("https://")
+    assert fetch_nexus_thumbnail("http://insecure.example.com/a.png") is None

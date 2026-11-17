@@ -1,1 +1,2 @@
 customtkinter
+pillow>=10.0

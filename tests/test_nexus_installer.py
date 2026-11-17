@@ -10,7 +10,12 @@ from typing import Any
 
 import pytest
 
-from src.core.nexus_installer import NexusTarget, install_from_nexus, parse_nexus_input
+from src.core.nexus_installer import (
+    NexusForbiddenError,
+    NexusTarget,
+    install_from_nexus,
+    parse_nexus_input,
+)
 
 
 @pytest.mark.parametrize(
@@ -100,5 +105,5 @@ def test_install_from_nexus_handles_403_free_account_and_missing_key(
         raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)  # type: ignore[arg-type]
 
     monkeypatch.setattr(urllib.request, "urlopen", raise_403)
-    with pytest.raises(ValueError, match="nxm://"):
+    with pytest.raises(NexusForbiddenError, match="Nexus Premium"):
         install_from_nexus("1915", api_key="test-key", modpack_dir=tmp_path)
