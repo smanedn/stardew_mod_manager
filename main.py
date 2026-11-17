@@ -70,7 +70,7 @@ from src.core.updater import (
 )
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_list import ModListPanel
-from src.ui.nexus_dialog import NexusInstallDialog
+from src.ui.nexus_dialog import NexusBrowserDialog
 from src.ui.profile_sidebar import ProfileSidebar
 from src.ui.theme import SPACING
 from src.ui.top_bar import TopBar
@@ -398,11 +398,16 @@ class SVModManagerApp(ctk.CTk):
         threading.Thread(target=worker, daemon=True).start()
 
     def _open_nexus_dialog(self) -> None:
-        NexusInstallDialog(
+        NexusBrowserDialog(
             self,
             initial_api_key=self.config_manager.nexus_api_key,
-            on_submit=self._install_nexus,
+            on_save_api_key=self._save_nexus_api_key,
+            on_install_mod=self._install_nexus,
         )
+
+    def _save_nexus_api_key(self, api_key: str) -> None:
+        if api_key != self.config_manager.nexus_api_key:
+            self.config_manager.nexus_api_key = api_key
 
     def _install_nexus(self, raw_target: str, api_key: str) -> None:
         if api_key != self.config_manager.nexus_api_key:
