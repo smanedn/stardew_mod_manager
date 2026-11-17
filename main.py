@@ -8,11 +8,17 @@ import sys
 import threading
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+IS_FROZEN = getattr(sys, "frozen", False)
+PROJECT_ROOT = (
+    Path(sys.executable).resolve().parent if IS_FROZEN else Path(__file__).resolve().parent
+)
+BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", PROJECT_ROOT))
 
 
 def _ensure_venv() -> None:
     """Re-launch using .venv Python when double-clicked or run with system Python."""
+    if IS_FROZEN:
+        return
     venv_dir = PROJECT_ROOT / ".venv"
     if not venv_dir.is_dir():
         return
@@ -47,6 +53,7 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from src import __version__
 from src.core.config import ConfigManager
 from src.core.launcher import get_smapi_log_path, launch_game, validate_game_path
 from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
@@ -60,8 +67,8 @@ from src.ui.top_bar import TopBar
 MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
 PROFILES_DIR = PROJECT_ROOT / "SVMM_Data" / "profiles"
 CONFIG_FILE = PROJECT_ROOT / "SVMM_Data" / "config.json"
-LOGO_FILE = PROJECT_ROOT / "assets" / "logo.png"
-ICON_FILE = PROJECT_ROOT / "assets" / "logo.ico"
+LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
+ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
 
 
 def _open_in_file_manager(target: Path) -> None:
@@ -79,7 +86,7 @@ class SVModManagerApp(ctk.CTk):
 
     def __init__(self) -> None:
         super().__init__()
-        self.title("Stardew Valley Mod Manager")
+        self.title(f"Stardew Valley Mod Manager v{__version__}")
         self.geometry("1020x680")
         self.minsize(800, 540)
         self._set_app_icon()
@@ -155,6 +162,7 @@ class SVModManagerApp(ctk.CTk):
 
         self.launch_bar = LaunchBar(
             self,
+            version=__version__,
             on_launch_modded=self._launch_modded,
             on_launch_vanilla=self._launch_vanilla,
             on_open_smapi_log=self._open_smapi_log,

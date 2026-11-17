@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
+from src import __version__
 from src.core.config import ConfigManager, validate_profile_name
+
+
+def test_package_version_is_defined() -> None:
+    assert isinstance(__version__, str)
+    assert len(__version__.split(".")) == 3
 
 
 def test_default_config_created_when_missing(tmp_path: Path) -> None:

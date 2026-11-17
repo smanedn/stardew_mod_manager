@@ -15,6 +15,7 @@ class LaunchBar(ctk.CTkFrame):
     def __init__(
         self,
         master: ctk.CTkBaseClass,
+        version: str,
         on_launch_modded: Callable[[], None],
         on_launch_vanilla: Callable[[], None],
         on_open_smapi_log: Callable[[], None],
@@ -78,8 +79,16 @@ class LaunchBar(ctk.CTkFrame):
             text_color=COLORS["text_muted"],
         )
         self.status_label.grid(
-            row=1, column=0, columnspan=3, sticky="ew", padx=SPACING["lg"], pady=(2, 8)
+            row=1, column=0, columnspan=2, sticky="ew", padx=SPACING["lg"], pady=(2, 8)
         )
+
+        ctk.CTkLabel(
+            self,
+            text=f"v{version}",
+            anchor="e",
+            font=font_small(),
+            text_color=COLORS["text_muted"],
+        ).grid(row=1, column=2, sticky="e", padx=SPACING["lg"], pady=(2, 8))
 
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"

@@ -40,6 +40,14 @@ A lightweight desktop mod manager for **Stardew Valley** built with Python and `
 - **GUI:** [`customtkinter`](https://github.com/TomSchimansky/CustomTkinter)
 - **Backend:** Python Standard Library (`json`, `pathlib`, `subprocess`, `os`, `shutil`, `stat`)
 
+## Download
+
+Pre-built Windows executables are available on the [Releases page](https://github.com/smanedn/stardew_mod_manager/releases/latest):
+
+1. Download `SVModManager-vX.Y.Z-windows-x64.zip` and extract `SVModManager.exe` into its own folder.
+2. Double-click `SVModManager.exe` to launch (it stores `SVMM_Data/` right next to the executable).
+3. If Windows SmartScreen appears for an unsigned binary, click **More info → Run anyway**.
+
 ## Prerequisites
 
 - **Python 3.10+**
