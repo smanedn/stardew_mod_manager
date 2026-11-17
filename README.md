@@ -95,31 +95,43 @@ Pre-built Windows executables are available on the [Releases page](https://githu
 
 ```text
 stardew_mod_manager/
-├── main.py                  # Entry point, .venv bootstrap, and app orchestrator
-├── requirements.txt         # Runtime dependency (customtkinter)
-├── requirements-dev.txt     # Dev dependencies (pytest, ruff)
-├── pyproject.toml           # Ruff and pytest configuration
-├── .gitignore               # Ignores .venv, __pycache__, SVMM_Data, .env*, OS/IDE files
+├── main.py                      # Entry point, .venv/frozen bootstrap, and app orchestrator
+├── requirements.txt             # Runtime dependency (customtkinter)
+├── requirements-dev.txt         # Dev dependencies (pytest, pytest-cov, ruff, mypy)
+├── pyproject.toml               # Ruff, mypy, and pytest configuration
+├── .gitignore                   # Ignores .venv, __pycache__, SVMM_Data, .env*, build/dist
+├── CHANGELOG.md                 # Release history (Keep a Changelog)
+├── CONTRIBUTING.md              # Local dev setup and contribution guidelines
+├── LICENSE                      # MIT License
+├── .github/
+│   ├── ISSUE_TEMPLATE/          # Bug report and feature request templates
+│   └── workflows/
+│       ├── ci.yml               # Cross-platform lint, format, mypy, and pytest CI
+│       └── release.yml          # Windows PyInstaller .exe release workflow on v* tags
 ├── assets/
-│   ├── logo.png             # Application icon and README logo
-│   ├── logo.ico             # Windows titlebar icon
-│   └── screenshots/         # Screenshots for documentation
+│   ├── logo.png                 # Application icon and README logo
+│   ├── logo.ico                 # Windows titlebar icon
+│   └── screenshots/             # Screenshots for documentation
 ├── src/
-│   ├── __init__.py
+│   ├── __init__.py              # Package version (__version__)
 │   ├── core/
 │   │   ├── __init__.py
-│   │   ├── config.py        # ConfigManager, validation, and profile import/export
-│   │   ├── mod_scanner.py   # Mod folder scanner and SMAPI manifest.json parser
-│   │   ├── mod_manager.py   # Profile junction/symlink sync and Mods_Backup handling
-│   │   └── launcher.py      # Path validation, SMAPI log locator, and game launcher
+│   │   ├── config.py            # ConfigManager, validation, import/export/duplicate
+│   │   ├── dependencies.py      # Missing dependency and duplicate UniqueID detection
+│   │   ├── mod_installer.py     # Safe .zip extractor with zip-slip protection
+│   │   ├── mod_scanner.py       # Mod folder scanner and SMAPI manifest.json parser
+│   │   ├── mod_manager.py       # Profile junction/symlink sync and Mods_Backup handling
+│   │   ├── launcher.py          # Path validation, SMAPI log locator, and game launcher
+│   │   └── updater.py           # UpdateProvider interface, GitHub provider, and TTL cache
 │   └── ui/
 │       ├── __init__.py
-│       ├── theme.py         # Light/dark design tokens and typography
-│       ├── top_bar.py       # Game path bar, validation status, and theme switcher
-│       ├── profile_sidebar.py # Modpack list, create/delete, and import/export
-│       ├── mod_list.py      # Debounced search, cached mod rows, and counter badge
-│       └── launch_bar.py    # Modded/Vanilla launch buttons, SMAPI log, and status bar
-└── tests/                   # Unit tests for core modules
+│       ├── theme.py             # Light/dark design tokens and typography
+│       ├── tooltip.py           # Hover tooltip widget for warnings and updates
+│       ├── top_bar.py           # Game path bar, validation status, and theme switcher
+│       ├── profile_sidebar.py   # Modpack list, create/duplicate/delete, import/export
+│       ├── mod_list.py          # Debounced search, cached rows, .zip install, updates
+│       └── launch_bar.py        # Modded/Vanilla launch, SMAPI log, version, status bar
+└── tests/                       # Unit tests for core modules
 ```
 
 ## Roadmap
