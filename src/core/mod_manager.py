@@ -69,6 +69,34 @@ def _backup_unmanaged_mods(game_dir: Path, mods_path: Path) -> Path:
     return backup_path
 
 
+def _sync_profile_tree(current_dir: Path, profile_root: Path, desired: dict[str, Path]) -> set[str]:
+    """Recursively clean stale entries in current_dir without descending into junctions."""
+    existing_valid: set[str] = set()
+    for entry in list(current_dir.iterdir()):
+        rel_key = entry.relative_to(profile_root).as_posix()
+        if _is_link_or_junction(entry):
+            if rel_key in desired:
+                try:
+                    if entry.resolve() == desired[rel_key].resolve():
+                        existing_valid.add(rel_key)
+                        continue
+                except OSError:
+                    pass
+            _remove_link_or_junction(entry)
+        elif entry.is_dir():
+            # Keep parent container dir if any desired nested mod lives under it
+            prefix = f"{rel_key}/"
+            if any(k.startswith(prefix) for k in desired):
+                existing_valid.update(_sync_profile_tree(entry, profile_root, desired))
+                if not any(entry.iterdir()):
+                    entry.rmdir()
+            else:
+                shutil.rmtree(entry)
+        else:
+            entry.unlink()
+    return existing_valid
+
+
 def sync_profile(
     profile_id: str,
     enabled_mods: list[str],
@@ -81,32 +109,18 @@ def sync_profile(
     profile_dir.mkdir(parents=True, exist_ok=True)
 
     desired = {
-        mod_folder: (pool_dir / mod_folder)
+        mod_folder.replace("\\", "/"): (pool_dir / mod_folder)
         for mod_folder in enabled_mods
         if (pool_dir / mod_folder).is_dir()
     }
 
-    # Remove stale entries or broken/mismatched links; keep valid matching links intact
-    existing_valid: set[str] = set()
-    for entry in list(profile_dir.iterdir()):
-        if entry.name in desired and _is_link_or_junction(entry):
-            try:
-                if entry.resolve() == desired[entry.name].resolve():
-                    existing_valid.add(entry.name)
-                    continue
-            except OSError:
-                pass
-
-        if _is_link_or_junction(entry):
-            _remove_link_or_junction(entry)
-        elif entry.is_dir():
-            shutil.rmtree(entry)
-        else:
-            entry.unlink()
+    existing_valid = _sync_profile_tree(profile_dir, profile_dir, desired)
 
     for mod_folder, target in desired.items():
         if mod_folder not in existing_valid:
-            _create_dir_link(profile_dir / mod_folder, target)
+            link_path = profile_dir / mod_folder
+            link_path.parent.mkdir(parents=True, exist_ok=True)
+            _create_dir_link(link_path, target)
 
     return profile_dir
 

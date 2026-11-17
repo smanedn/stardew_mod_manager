@@ -143,8 +143,8 @@ stardew_mod_manager/
 - [x] Ruff linting, `pytest` suite, and GitHub Actions CI
 - [x] Dependency/conflict hints using `UniqueID` and `Dependencies` in `manifest.json`
 - [x] Safe `.zip` mod installation and `UpdateKeys` update checker (`GitHub:owner/repo`)
-- [ ] Recursive scanning for nested modpacks containing subfolder `manifest.json` files
-- [ ] Additional update providers (e.g. Nexus Mods with optional user API key)
+- [x] Recursive scanning for nested modpacks containing subfolder `manifest.json` files
+- [x] Additional update providers (Nexus Mods via optional `nexus_api_key` in `SVMM_Data/config.json`)
 - [x] Windows `.exe` release workflow via PyInstaller on `v*` tags
 - [ ] Verified macOS and Linux runtime testing
 

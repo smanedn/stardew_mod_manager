@@ -61,7 +61,12 @@ from src.core.launcher import get_smapi_log_path, launch_game, validate_game_pat
 from src.core.mod_installer import install_mod_zip
 from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
-from src.core.updater import GitHubUpdateProvider, UpdateChecker, UpdateResult
+from src.core.updater import (
+    GitHubUpdateProvider,
+    NexusUpdateProvider,
+    UpdateChecker,
+    UpdateResult,
+)
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_list import ModListPanel
 from src.ui.profile_sidebar import ProfileSidebar
@@ -416,11 +421,15 @@ class SVModManagerApp(ctk.CTk):
 
         mods_snapshot = list(self._current_mods)
         token = self.config_manager.github_token
+        nexus_key = self.config_manager.nexus_api_key
         self.launch_bar.set_status("Checking for mod updates...", level="info")
 
         def worker() -> None:
             checker = UpdateChecker(
-                providers=[GitHubUpdateProvider(token=token)],
+                providers=[
+                    GitHubUpdateProvider(token=token),
+                    NexusUpdateProvider(api_key=nexus_key),
+                ],
                 cache_path=UPDATE_CACHE_FILE,
             )
             results = checker.check_mods(mods_snapshot)

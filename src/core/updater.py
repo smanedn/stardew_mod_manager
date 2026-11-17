@@ -82,6 +82,41 @@ class GitHubUpdateProvider:
         return tag.lstrip("vV"), html_url
 
 
+class NexusUpdateProvider:
+    """Checks Nexus Mods API v1 for `Nexus:<mod_id>` UpdateKeys when an API key is configured."""
+
+    def __init__(self, api_key: str = "") -> None:
+        self.api_key = api_key.strip()
+
+    def _extract_mod_id(self, update_key: str) -> str | None:
+        if not update_key.lower().startswith("nexus:"):
+            return None
+        raw_id = update_key.split(":", 1)[1].split("@", 1)[0].strip()
+        return raw_id if raw_id.isdigit() else None
+
+    def supports(self, update_key: str) -> bool:
+        return bool(self.api_key) and self._extract_mod_id(update_key) is not None
+
+    def fetch_latest(self, update_key: str, timeout: float = 5.0) -> tuple[str, str] | None:
+        mod_id = self._extract_mod_id(update_key)
+        if not mod_id or not self.api_key:
+            return None
+        api_url = f"https://api.nexusmods.com/v1/games/stardewvalley/mods/{mod_id}.json"
+        headers = {
+            "apikey": self.api_key,
+            "Accept": "application/json",
+            "User-Agent": "SVMM-UpdateChecker",
+        }
+        req = urllib.request.Request(api_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+
+        version = str(payload.get("version") or "").strip()
+        if not version:
+            return None
+        return version.lstrip("vV"), f"https://www.nexusmods.com/stardewvalley/mods/{mod_id}"
+
+
 class UpdateChecker:
     """Checks mods against UpdateProviders with optional JSON file caching."""
 

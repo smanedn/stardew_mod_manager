@@ -108,3 +108,20 @@ def test_vanilla_unlink_cases_and_invalid_paths(tmp_path: Path) -> None:
     assert ok
     assert not (game / "Mods").exists()
     assert (game / "Mods_Backup" / "SomeMod").is_dir()
+
+
+def test_sync_profile_supports_nested_mod_folders(tmp_path: Path) -> None:
+    pool = tmp_path / "modpacks" / "SVE"
+    profiles = tmp_path / "profiles"
+    (pool / "Bundle" / "SubModA").mkdir(parents=True)
+    (pool / "Bundle" / "SubModA" / "manifest.json").write_text('{"Name": "A"}', encoding="utf-8")
+    (pool / "Bundle" / "SubModB").mkdir(parents=True)
+
+    profile_dir = sync_profile("SVE", ["Bundle/SubModA"], pool, profiles)
+    assert (profile_dir / "Bundle" / "SubModA" / "manifest.json").is_file()
+    assert not (profile_dir / "Bundle" / "SubModB").exists()
+
+    # Switching enabled list removes stale nested links cleanly
+    sync_profile("SVE", ["Bundle/SubModB"], pool, profiles)
+    assert not (profile_dir / "Bundle" / "SubModA").exists()
+    assert (profile_dir / "Bundle" / "SubModB").is_dir()

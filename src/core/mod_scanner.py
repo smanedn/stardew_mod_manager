@@ -162,22 +162,44 @@ def _parse_update_keys(raw_keys: Any) -> tuple[str, ...]:
     return tuple(str(k).strip() for k in raw_keys if isinstance(k, str) and k.strip())
 
 
+def _collect_mod_folders(root: Path, is_top_level: bool = True) -> list[Path]:
+    """Recursively find mod folders containing manifest.json (preserving empty top-level dirs)."""
+    if not root.is_dir():
+        return []
+
+    found: list[Path] = []
+    for entry in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+
+        if (entry / "manifest.json").is_file():
+            found.append(entry)
+            continue
+
+        nested = _collect_mod_folders(entry, is_top_level=False)
+        if nested:
+            found.extend(nested)
+        elif is_top_level:
+            # Keep top-level folders that have no manifest anywhere so user sees the warning
+            found.append(entry)
+
+    return found
+
+
 def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") -> list[ModInfo]:
-    """Scan the mod pool directory and return metadata for each mod folder."""
+    """Scan the mod pool directory (recursively) and return metadata for each mod folder."""
     pool_dir = Path(mod_pool_path)
     if not pool_dir.exists() or not pool_dir.is_dir():
         return []
 
     mods: list[ModInfo] = []
-    for entry in sorted(pool_dir.iterdir(), key=lambda p: p.name.lower()):
-        if not entry.is_dir() or entry.name.startswith("."):
-            continue
-
+    for entry in _collect_mod_folders(pool_dir):
+        rel_folder = entry.relative_to(pool_dir).as_posix()
         manifest_path = entry / "manifest.json"
         if not manifest_path.is_file():
             mods.append(
                 ModInfo(
-                    folder_name=entry.name,
+                    folder_name=rel_folder,
                     name=entry.name,
                     version="Unknown",
                     path=entry,
@@ -195,7 +217,7 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
             author = str(manifest.get("Author") or "").strip()
             mods.append(
                 ModInfo(
-                    folder_name=entry.name,
+                    folder_name=rel_folder,
                     name=name,
                     version=version,
                     path=entry,
@@ -209,7 +231,7 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             mods.append(
                 ModInfo(
-                    folder_name=entry.name,
+                    folder_name=rel_folder,
                     name=entry.name,
                     version="Unknown",
                     path=entry,

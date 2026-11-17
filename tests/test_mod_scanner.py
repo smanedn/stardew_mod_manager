@@ -67,3 +67,27 @@ def test_scan_mod_pool_handles_missing_non_object_and_malformed_manifests(
 
 def test_scan_mod_pool_nonexistent_dir_returns_empty(tmp_path: Path) -> None:
     assert scan_mod_pool(tmp_path / "does_not_exist") == []
+
+
+def test_scan_mod_pool_discovers_nested_modpack_folders(tmp_path: Path) -> None:
+    pool = tmp_path / "modpacks" / "SVE"
+    (pool / "SVE Pack" / "[CP] SVE").mkdir(parents=True)
+    (pool / "SVE Pack" / "[CP] SVE" / "manifest.json").write_text(
+        '{"Name": "Stardew Valley Expanded", "Version": "1.15.0"}', encoding="utf-8"
+    )
+    # Nested asset folder inside a mod must NOT be scanned as a separate mod
+    (pool / "SVE Pack" / "[CP] SVE" / "assets").mkdir()
+    (pool / "SVE Pack" / "[CP] SVE" / "assets" / "manifest.json").write_text(
+        '{"Name": "ShouldBeIgnored"}', encoding="utf-8"
+    )
+    (pool / "SVE Pack" / "[FTM] SVE").mkdir(parents=True)
+    (pool / "SVE Pack" / "[FTM] SVE" / "manifest.json").write_text(
+        '{"Name": "FTM SVE", "Version": "1.0.0"}', encoding="utf-8"
+    )
+
+    mods = scan_mod_pool(pool)
+    assert [m.folder_name for m in mods] == [
+        "SVE Pack/[CP] SVE",
+        "SVE Pack/[FTM] SVE",
+    ]
+    assert mods[0].name == "Stardew Valley Expanded"

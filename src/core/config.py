@@ -28,6 +28,7 @@ class AppConfig(TypedDict):
     active_profile: str
     appearance_mode: str
     github_token: str
+    nexus_api_key: str
     profiles: dict[str, ProfileData]
 
 
@@ -36,6 +37,7 @@ DEFAULT_CONFIG: AppConfig = {
     "active_profile": "Default",
     "appearance_mode": "dark",
     "github_token": "",
+    "nexus_api_key": "",
     "profiles": {
         "Default": {
             "name": "Default",
@@ -139,6 +141,10 @@ class ConfigManager:
         if isinstance(token, str):
             normalized["github_token"] = token.strip()
 
+        nexus_key = raw.get("nexus_api_key")
+        if isinstance(nexus_key, str):
+            normalized["nexus_api_key"] = nexus_key.strip()
+
         raw_profiles = raw.get("profiles")
         if isinstance(raw_profiles, dict) and raw_profiles:
             profiles: dict[str, ProfileData] = {}
@@ -191,6 +197,11 @@ class ConfigManager:
     def github_token(self) -> str:
         """Return optional user-configured GitHub token for higher API rate limits."""
         return str(self.data.get("github_token", ""))
+
+    @property
+    def nexus_api_key(self) -> str:
+        """Return optional user-configured Nexus Mods API key."""
+        return str(self.data.get("nexus_api_key", ""))
 
     @property
     def active_profile(self) -> str:

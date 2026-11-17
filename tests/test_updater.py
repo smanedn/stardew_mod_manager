@@ -10,7 +10,12 @@ from typing import Any
 import pytest
 
 from src.core.mod_scanner import ModInfo
-from src.core.updater import GitHubUpdateProvider, UpdateChecker, is_newer_version
+from src.core.updater import (
+    GitHubUpdateProvider,
+    NexusUpdateProvider,
+    UpdateChecker,
+    is_newer_version,
+)
 
 
 class _FakeProvider:
@@ -107,3 +112,36 @@ def test_github_provider_fetches_release_with_optional_token(
     assert latest == ("2.5.0", "https://github.com/user/repo/releases/tag/v2.5.0")
     assert captured_headers.get("Authorization") == "Bearer user-secret-token"
     assert isinstance(io.BytesIO(), io.BytesIO)
+
+
+def test_nexus_provider_requires_api_key_and_parses_mod_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    no_key = NexusUpdateProvider(api_key="")
+    assert not no_key.supports("Nexus:1915")
+
+    with_key = NexusUpdateProvider(api_key="my-nexus-key")
+    assert with_key.supports("Nexus:1915")
+    assert with_key.supports("Nexus:1915@ContentPatcher")
+    assert not with_key.supports("GitHub:owner/repo")
+
+    captured_headers: dict[str, str] = {}
+
+    class _FakeResp:
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps({"version": "2.3.1"}).encode("utf-8")
+
+    def fake_urlopen(req: urllib.request.Request, timeout: float = 5.0) -> Any:
+        captured_headers.update({k.lower(): v for k, v in req.header_items()})
+        return _FakeResp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    latest = with_key.fetch_latest("Nexus:1915@optional")
+    assert latest == ("2.3.1", "https://www.nexusmods.com/stardewvalley/mods/1915")
+    assert captured_headers.get("apikey") == "my-nexus-key"
