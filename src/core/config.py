@@ -27,6 +27,7 @@ class AppConfig(TypedDict):
     game_path: str
     active_profile: str
     appearance_mode: str
+    github_token: str
     profiles: dict[str, ProfileData]
 
 
@@ -34,6 +35,7 @@ DEFAULT_CONFIG: AppConfig = {
     "game_path": DEFAULT_GAME_PATH,
     "active_profile": "Default",
     "appearance_mode": "dark",
+    "github_token": "",
     "profiles": {
         "Default": {
             "name": "Default",
@@ -133,6 +135,10 @@ class ConfigManager:
         if isinstance(mode, str) and mode.lower() in ("dark", "light", "system"):
             normalized["appearance_mode"] = mode.lower()
 
+        token = raw.get("github_token")
+        if isinstance(token, str):
+            normalized["github_token"] = token.strip()
+
         raw_profiles = raw.get("profiles")
         if isinstance(raw_profiles, dict) and raw_profiles:
             profiles: dict[str, ProfileData] = {}
@@ -180,6 +186,11 @@ class ConfigManager:
             raise ValueError(f"Unsupported appearance mode: {mode}")
         self.data["appearance_mode"] = clean
         self.save()
+
+    @property
+    def github_token(self) -> str:
+        """Return optional user-configured GitHub token for higher API rate limits."""
+        return str(self.data.get("github_token", ""))
 
     @property
     def active_profile(self) -> str:
@@ -274,3 +285,25 @@ class ConfigManager:
         self.create_profile(candidate, display_name)
         self.set_enabled_mods(enabled_mods, candidate)
         return candidate
+
+    def duplicate_profile(self, source_id: str, new_id: str | None = None) -> str:
+        """Duplicate an existing profile's configuration and return the new profile ID."""
+        if source_id not in self.profiles:
+            raise KeyError(f"Profile '{source_id}' does not exist.")
+        if new_id is not None:
+            target_id = validate_profile_name(new_id)
+            if target_id in self.profiles:
+                raise ValueError(f"Profile '{target_id}' already exists.")
+        else:
+            idx = 1
+            target_id = f"{source_id}_copy"
+            while target_id in self.profiles:
+                idx += 1
+                target_id = f"{source_id}_copy_{idx}"
+
+        self.profiles[target_id] = {
+            "name": target_id,
+            "enabled_mods": self.get_enabled_mods(source_id),
+        }
+        self.save()
+        return target_id

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -55,9 +56,12 @@ import customtkinter as ctk
 
 from src import __version__
 from src.core.config import ConfigManager
+from src.core.dependencies import analyze_mod_dependencies, format_issue_summary
 from src.core.launcher import get_smapi_log_path, launch_game, validate_game_path
+from src.core.mod_installer import install_mod_zip
 from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
+from src.core.updater import GitHubUpdateProvider, UpdateChecker, UpdateResult
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_list import ModListPanel
 from src.ui.profile_sidebar import ProfileSidebar
@@ -67,6 +71,7 @@ from src.ui.top_bar import TopBar
 MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
 PROFILES_DIR = PROJECT_ROOT / "SVMM_Data" / "profiles"
 CONFIG_FILE = PROJECT_ROOT / "SVMM_Data" / "config.json"
+UPDATE_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "update_cache.json"
 LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
 ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
 
@@ -102,6 +107,7 @@ class SVModManagerApp(ctk.CTk):
         self._ensure_modpack_folders()
 
         self._scan_generation = 0
+        self._current_mods: list[ModInfo] = []
         self._build_layout()
         self._bind_shortcuts()
 
@@ -138,6 +144,7 @@ class SVModManagerApp(ctk.CTk):
             on_delete=self._delete_active_profile,
             on_import=self._import_profile,
             on_export=self._export_profile,
+            on_duplicate=self._duplicate_profile,
         )
         self.sidebar.grid(
             row=1,
@@ -151,6 +158,8 @@ class SVModManagerApp(ctk.CTk):
             self,
             on_toggle=self._on_mods_toggled,
             on_refresh=self._refresh_mods,
+            on_install_zip=self._install_zip,
+            on_check_updates=self._check_updates,
         )
         self.mod_list.grid(
             row=1,
@@ -336,6 +345,117 @@ class SVModManagerApp(ctk.CTk):
             auto_clear_ms=5000,
         )
 
+    def _duplicate_profile(self) -> None:
+        active = self.config_manager.active_profile
+        try:
+            new_id = self.config_manager.duplicate_profile(active)
+            src_dir = MODPACKS_DIR / active
+            dst_dir = MODPACKS_DIR / new_id
+            if src_dir.is_dir():
+                shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+            else:
+                dst_dir.mkdir(parents=True, exist_ok=True)
+            self.config_manager.active_profile = new_id
+        except (OSError, ValueError, KeyError) as exc:
+            self.launch_bar.set_status(f"Duplicate failed: {exc}", level="error")
+            return
+
+        self._refresh_profiles()
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Duplicated '{active}' as '{new_id}'.", level="success", auto_clear_ms=4000
+        )
+
+    def _install_zip(self) -> None:
+        zip_path = filedialog.askopenfilename(
+            title="Select Mod Archive (.zip)",
+            filetypes=[("Zip archives", "*.zip")],
+        )
+        if not zip_path:
+            return
+
+        active = self.config_manager.active_profile
+        modpack_dir = self._active_modpack_dir()
+        self.mod_list.set_loading(True, f"Installing {Path(zip_path).name}...")
+
+        def worker() -> None:
+            try:
+                installed = install_mod_zip(zip_path, modpack_dir)
+                err = None
+            except (OSError, ValueError) as exc:
+                installed = []
+                err = str(exc)
+            self.after(0, lambda: self._on_install_complete(active, installed, err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_install_complete(
+        self, profile_id: str, installed: list[str], error: str | None
+    ) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_loading(False)
+        if error:
+            self.launch_bar.set_status(f"Install failed: {error}", level="error")
+            self._refresh_mods()
+            return
+
+        current = self.config_manager.get_enabled_mods(profile_id)
+        self.config_manager.set_enabled_mods(current + installed, profile_id)
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Installed {', '.join(installed)} into '{profile_id}'.",
+            level="success",
+            auto_clear_ms=5000,
+        )
+
+    def _check_updates(self) -> None:
+        if not self._current_mods:
+            self.launch_bar.set_status("No mods to check for updates.", level="info")
+            return
+
+        mods_snapshot = list(self._current_mods)
+        token = self.config_manager.github_token
+        self.launch_bar.set_status("Checking for mod updates...", level="info")
+
+        def worker() -> None:
+            checker = UpdateChecker(
+                providers=[GitHubUpdateProvider(token=token)],
+                cache_path=UPDATE_CACHE_FILE,
+            )
+            results = checker.check_mods(mods_snapshot)
+            self.after(0, lambda: self._on_updates_checked(results))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_updates_checked(self, results: list[UpdateResult]) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_updates(results)
+        updates = [r for r in results if r.has_update]
+        errors = [r for r in results if r.error]
+        if updates:
+            self.launch_bar.set_status(
+                f"{len(updates)} update(s) available (hover ↑ badge for details).",
+                level="warning",
+            )
+        elif errors and not results:
+            self.launch_bar.set_status(
+                "Update check failed (offline or rate-limited).", level="error"
+            )
+        elif errors:
+            checked_ok = len(results) - len(errors)
+            self.launch_bar.set_status(
+                f"Checked {checked_ok} mod(s); {len(errors)} failed (offline/rate-limit).",
+                level="warning",
+            )
+        else:
+            self.launch_bar.set_status(
+                f"Checked {len(results)} mod(s) with UpdateKeys: all up to date.",
+                level="success",
+                auto_clear_ms=5000,
+            )
+
     def _refresh_mods(self) -> None:
         self._scan_generation += 1
         generation = self._scan_generation
@@ -353,21 +473,36 @@ class SVModManagerApp(ctk.CTk):
     def _on_scan_complete(self, generation: int, profile_id: str, mods: list[ModInfo]) -> None:
         if generation != self._scan_generation or not self.winfo_exists():
             return
+        self._current_mods = mods
         self.mod_list.set_loading(False)
         enabled = self.config_manager.get_enabled_mods(profile_id)
         self.mod_list.set_mods(mods, enabled, profile_id)
+        issues = analyze_mod_dependencies(mods, set(enabled))
+        self.mod_list.set_issues(issues)
         self.launch_bar.set_status(
             f"Found {len(mods)} mod(s) in modpack '{profile_id}'.", level="info"
         )
 
     def _on_mods_toggled(self, enabled_mods: list[str]) -> None:
         self.config_manager.set_enabled_mods(enabled_mods)
+        issues = analyze_mod_dependencies(self._current_mods, set(enabled_mods))
+        self.mod_list.set_issues(issues)
 
     def _launch_modded(self) -> None:
         game_path = self.top_bar.get_path()
         self._on_game_path_changed(game_path)
         active = self.config_manager.active_profile
         enabled = self.config_manager.get_enabled_mods(active)
+        issues = analyze_mod_dependencies(self._current_mods, set(enabled))
+        if issues:
+            summary = format_issue_summary(issues, self._current_mods)
+            proceed = messagebox.askyesno(
+                "Dependency / Conflict Warning",
+                f"Issues detected in modpack '{active}':\n\n{summary}\n\nLaunch SMAPI anyway?",
+            )
+            if not proceed:
+                return
+
         modpack_dir = self._active_modpack_dir()
 
         self.launch_bar.set_busy(True)

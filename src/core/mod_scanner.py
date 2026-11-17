@@ -9,6 +9,15 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class ModDependency:
+    """Dependency entry declared in a SMAPI manifest.json."""
+
+    unique_id: str
+    is_required: bool = True
+    minimum_version: str = ""
+
+
+@dataclass(frozen=True)
 class ModInfo:
     """Metadata extracted from a mod directory in the mod pool."""
 
@@ -20,6 +29,8 @@ class ModInfo:
     author: str = ""
     has_manifest: bool = True
     error: str | None = None
+    dependencies: tuple[ModDependency, ...] = ()
+    update_keys: tuple[str, ...] = ()
 
 
 def _strip_json_comments_and_trailing_commas(text: str) -> str:
@@ -123,6 +134,34 @@ def parse_manifest(manifest_path: Path) -> dict[str, Any]:
     return parsed
 
 
+def _parse_dependencies(raw_deps: Any) -> tuple[ModDependency, ...]:
+    if not isinstance(raw_deps, list):
+        return ()
+    deps: list[ModDependency] = []
+    for item in raw_deps:
+        if not isinstance(item, dict):
+            continue
+        uid = str(item.get("UniqueID") or "").strip()
+        if not uid:
+            continue
+        is_req = item.get("IsRequired", True)
+        min_ver = str(item.get("MinimumVersion") or "").strip()
+        deps.append(
+            ModDependency(
+                unique_id=uid,
+                is_required=bool(is_req) if isinstance(is_req, bool) else True,
+                minimum_version=min_ver,
+            )
+        )
+    return tuple(deps)
+
+
+def _parse_update_keys(raw_keys: Any) -> tuple[str, ...]:
+    if not isinstance(raw_keys, list):
+        return ()
+    return tuple(str(k).strip() for k in raw_keys if isinstance(k, str) and k.strip())
+
+
 def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") -> list[ModInfo]:
     """Scan the mod pool directory and return metadata for each mod folder."""
     pool_dir = Path(mod_pool_path)
@@ -163,6 +202,8 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
                     unique_id=unique_id,
                     author=author,
                     has_manifest=True,
+                    dependencies=_parse_dependencies(manifest.get("Dependencies")),
+                    update_keys=_parse_update_keys(manifest.get("UpdateKeys")),
                 )
             )
         except (OSError, ValueError, json.JSONDecodeError) as exc:

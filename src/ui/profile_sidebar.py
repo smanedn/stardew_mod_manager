@@ -21,6 +21,7 @@ class ProfileSidebar(ctk.CTkFrame):
         on_delete: Callable[[], None],
         on_import: Callable[[], None],
         on_export: Callable[[], None],
+        on_duplicate: Callable[[], None],
     ) -> None:
         super().__init__(master, width=240, border_width=1, border_color=COLORS["border"])
         self.grid_propagate(False)
@@ -71,6 +72,14 @@ class ProfileSidebar(ctk.CTkFrame):
             hover_color=COLORS["neutral_btn_hover"],
             command=on_export,
         ).grid(row=0, column=1, sticky="ew", padx=(3, 0))
+
+        ctk.CTkButton(
+            io_frame,
+            text="Duplicate",
+            fg_color=COLORS["neutral_btn"],
+            hover_color=COLORS["neutral_btn_hover"],
+            command=on_duplicate,
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(SPACING["xs"], 0))
 
         self.delete_btn = ctk.CTkButton(
             self,

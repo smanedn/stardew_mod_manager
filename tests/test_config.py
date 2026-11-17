@@ -108,6 +108,15 @@ def test_export_and_import_profile_round_trip(tmp_path: Path) -> None:
     assert cfg.profiles[imported_1]["name"] == "Cozy Pack"
 
 
+def test_duplicate_profile_creates_copy_with_mods(tmp_path: Path) -> None:
+    cfg = ConfigManager(tmp_path / "config.json")
+    cfg.create_profile("Cozy")
+    cfg.set_enabled_mods(["ModA", "ModB"], "Cozy")
+    copy_id = cfg.duplicate_profile("Cozy")
+    assert copy_id == "Cozy_copy"
+    assert cfg.get_enabled_mods(copy_id) == ["ModA", "ModB"]
+
+
 def test_import_invalid_profile_raises(tmp_path: Path) -> None:
     cfg = ConfigManager(tmp_path / "config.json")
     bad_file = tmp_path / "bad.json"

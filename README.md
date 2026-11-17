@@ -17,7 +17,10 @@ A lightweight desktop mod manager for **Stardew Valley** built with Python and `
 - **Instant Profile Switching:** Rebuilds `SVMM_Data/profiles/<ProfileName>/` and links `Stardew Valley/Mods` using directory junctions (`mklink /J` on Windows) or symlinks (macOS/Linux, experimental) with zero file copying.
 - **Safe Vanilla Launch:** Unlinks `Stardew Valley/Mods` and launches the base game (`Stardew Valley.exe`) without touching your mod files. Any pre-existing unmanaged `Mods` folder is safely backed up to `Mods_Backup`.
 - **Tolerant SMAPI Manifest Parser:** Reads `manifest.json` with UTF-8 BOM (`utf-8-sig`) support and safely handles comments and trailing commas.
-- **Profile Import / Export & Theme Support:** Share profile JSONs, switch between Dark / Light / System themes, and open `SMAPI-latest.txt` directly from the launch bar.
+- **Dependency & Conflict Warnings:** Flags missing required `Dependencies` and duplicate `UniqueID`s (`⚠` + hover tooltip) and prompts for confirmation before launching SMAPI.
+- **Safe `.zip` Mod Installer:** Install single or multi-mod `.zip` archives directly into the active modpack with zip-slip path traversal protection.
+- **Mod Update Checker:** Checks `GitHub:owner/repo` `UpdateKeys` in the background with caching (`SVMM_Data/update_cache.json`) and graceful offline handling (optional `github_token` in `SVMM_Data/config.json`).
+- **Profile Import / Export / Duplicate & Theme Support:** Share or duplicate profile JSONs, switch between Dark / Light / System themes, and open `SMAPI-latest.txt` directly from the launch bar.
 - **Double-Click Ready:** Running `main.py` directly on Windows automatically re-launches using `.venv` if present.
 
 ## Screenshots
@@ -124,11 +127,13 @@ stardew_mod_manager/
 - [x] Per-modpack folder isolation (`SVMM_Data/modpacks/<ProfileName>/`)
 - [x] Zero-copy Windows directory junction syncing & safe `Mods_Backup`
 - [x] Tolerant SMAPI `manifest.json` parser (BOM, comments, trailing commas)
-- [x] Dark / Light / System theme switcher & profile import/export
+- [x] Dark / Light / System theme switcher & profile import/export/duplicate
 - [x] Ruff linting, `pytest` suite, and GitHub Actions CI
+- [x] Dependency/conflict hints using `UniqueID` and `Dependencies` in `manifest.json`
+- [x] Safe `.zip` mod installation and `UpdateKeys` update checker (`GitHub:owner/repo`)
 - [ ] Recursive scanning for nested modpacks containing subfolder `manifest.json` files
-- [ ] Dependency/conflict hints using `UniqueID` and `Dependencies` in `manifest.json`
-- [ ] Optional standalone Windows `.exe` release builds via PyInstaller
+- [ ] Additional update providers (e.g. Nexus Mods with optional user API key)
+- [x] Windows `.exe` release workflow via PyInstaller on `v*` tags
 - [ ] Verified macOS and Linux runtime testing
 
 ## Contributing

@@ -1,4 +1,4 @@
-"""Main mod list component with debounced search, cached rows, and counter badge."""
+"""Main mod list component with debounced search, cached rows, warnings, and updates."""
 
 from __future__ import annotations
 
@@ -6,18 +6,23 @@ from collections.abc import Callable
 
 import customtkinter as ctk
 
+from src.core.dependencies import ModIssue
 from src.core.mod_scanner import ModInfo
+from src.core.updater import UpdateResult
 from src.ui.theme import COLORS, SPACING, font_small
+from src.ui.tooltip import ToolTip
 
 
 class ModListPanel(ctk.CTkFrame):
-    """Scrollable mod list with debounced search filtering and cached row widgets."""
+    """Scrollable mod list with debounced search, cached rows, and status badges."""
 
     def __init__(
         self,
         master: ctk.CTkBaseClass,
         on_toggle: Callable[[list[str]], None],
         on_refresh: Callable[[], None],
+        on_install_zip: Callable[[], None],
+        on_check_updates: Callable[[], None],
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
         self.grid_columnconfigure(0, weight=1)
@@ -25,7 +30,19 @@ class ModListPanel(ctk.CTkFrame):
 
         self._on_toggle = on_toggle
         self._mods: list[ModInfo] = []
-        self._mod_rows: dict[str, tuple[ctk.CTkCheckBox, ctk.BooleanVar]] = {}
+        # folder -> (row_frame, checkbox, var, warning_label, warning_tip, update_label, update_tip)
+        self._mod_rows: dict[
+            str,
+            tuple[
+                ctk.CTkFrame,
+                ctk.CTkCheckBox,
+                ctk.BooleanVar,
+                ctk.CTkLabel,
+                ToolTip,
+                ctk.CTkLabel,
+                ToolTip,
+            ],
+        ] = {}
         self._search_after_id: str | None = None
         self._active_profile_name = "Default"
 
@@ -50,14 +67,27 @@ class ModListPanel(ctk.CTkFrame):
         )
         self.count_label.grid(row=0, column=1, padx=SPACING["sm"])
 
-        ctk.CTkButton(filter_bar, text="Select All", width=86, command=self.select_all).grid(
-            row=0, column=2, padx=3
+        ctk.CTkButton(filter_bar, text="Select All", width=80, command=self.select_all).grid(
+            row=0, column=2, padx=2
         )
-        ctk.CTkButton(filter_bar, text="Deselect All", width=92, command=self.deselect_all).grid(
-            row=0, column=3, padx=3
+        ctk.CTkButton(filter_bar, text="Deselect All", width=88, command=self.deselect_all).grid(
+            row=0, column=3, padx=2
         )
-        self.refresh_btn = ctk.CTkButton(filter_bar, text="Refresh", width=76, command=on_refresh)
-        self.refresh_btn.grid(row=0, column=4, padx=(3, 0))
+        self.install_btn = ctk.CTkButton(
+            filter_bar, text="Install .zip", width=86, command=on_install_zip
+        )
+        self.install_btn.grid(row=0, column=4, padx=2)
+        self.update_btn = ctk.CTkButton(
+            filter_bar,
+            text="Updates",
+            width=74,
+            fg_color=COLORS["neutral_btn"],
+            hover_color=COLORS["neutral_btn_hover"],
+            command=on_check_updates,
+        )
+        self.update_btn.grid(row=0, column=5, padx=2)
+        self.refresh_btn = ctk.CTkButton(filter_bar, text="Refresh", width=72, command=on_refresh)
+        self.refresh_btn.grid(row=0, column=6, padx=(2, 0))
 
         # --- Scrollable Mods Area ---
         self.scroll_frame = ctk.CTkScrollableFrame(self)
@@ -76,10 +106,12 @@ class ModListPanel(ctk.CTkFrame):
             self.search_var.set("")
 
     def set_loading(self, loading: bool, message: str = "Scanning modpack...") -> None:
-        self.refresh_btn.configure(state="disabled" if loading else "normal")
+        state = "disabled" if loading else "normal"
+        self.refresh_btn.configure(state=state)
+        self.install_btn.configure(state=state)
         if loading:
-            for cb, _ in self._mod_rows.values():
-                cb.grid_remove()
+            for row_frame, *_ in self._mod_rows.values():
+                row_frame.grid_remove()
             self.empty_label.configure(text=message)
             self.empty_label.grid(row=0, column=0, padx=SPACING["md"], pady=24)
 
@@ -88,34 +120,73 @@ class ModListPanel(ctk.CTkFrame):
         self._active_profile_name = active_profile
         enabled_set = set(enabled_mods)
 
-        # Destroy old cached checkboxes only when the mod list itself reloads
-        for cb, _ in self._mod_rows.values():
-            cb.destroy()
+        for row_frame, *_ in self._mod_rows.values():
+            row_frame.destroy()
         self._mod_rows.clear()
         self.empty_label.grid_remove()
 
         for mod in mods:
+            row_frame = ctk.CTkFrame(self.scroll_frame, fg_color="transparent")
+            row_frame.grid_columnconfigure(0, weight=1)
+
             var = ctk.BooleanVar(value=mod.folder_name in enabled_set)
             author_part = f" by {mod.author}" if mod.author else ""
             label = f"{mod.name} (v{mod.version}){author_part}  [{mod.folder_name}]"
             if mod.error:
                 label += f"  [{mod.error}]"
             cb = ctk.CTkCheckBox(
-                self.scroll_frame,
+                row_frame,
                 text=label,
                 variable=var,
                 command=self._emit_toggle,
                 text_color=COLORS["warning_text"] if mod.error else COLORS["text_primary"],
             )
-            self._mod_rows[mod.folder_name] = (cb, var)
+            cb.grid(row=0, column=0, sticky="w", padx=4, pady=3)
+
+            warn_lbl = ctk.CTkLabel(
+                row_frame, text="", font=font_small(), text_color=COLORS["warning_text"]
+            )
+            warn_tip = ToolTip(warn_lbl, "")
+
+            upd_lbl = ctk.CTkLabel(
+                row_frame, text="", font=font_small(), text_color=COLORS["success_text"]
+            )
+            upd_tip = ToolTip(upd_lbl, "")
+
+            self._mod_rows[mod.folder_name] = (
+                row_frame,
+                cb,
+                var,
+                warn_lbl,
+                warn_tip,
+                upd_lbl,
+                upd_tip,
+            )
 
         self._apply_filter()
 
-    def sync_enabled(self, enabled_mods: list[str]) -> None:
-        enabled_set = set(enabled_mods)
-        for folder, (_, var) in self._mod_rows.items():
-            var.set(folder in enabled_set)
-        self._update_count()
+    def set_issues(self, issues: dict[str, list[ModIssue]]) -> None:
+        for folder, (_, _, _, warn_lbl, warn_tip, _, _) in self._mod_rows.items():
+            mod_issues = issues.get(folder)
+            if mod_issues:
+                warn_lbl.configure(text="⚠")
+                warn_lbl.grid(row=0, column=1, padx=(6, 2))
+                warn_tip.update_text("\n".join(i.message for i in mod_issues))
+            else:
+                warn_lbl.grid_remove()
+                warn_tip.update_text("")
+
+    def set_updates(self, results: list[UpdateResult]) -> None:
+        by_folder = {r.folder_name: r for r in results}
+        for folder, (_, _, _, _, _, upd_lbl, upd_tip) in self._mod_rows.items():
+            res = by_folder.get(folder)
+            if res and res.has_update:
+                upd_lbl.configure(text=f"↑ v{res.latest_version}")
+                upd_lbl.grid(row=0, column=2, padx=(4, 6))
+                upd_tip.update_text(f"Update available: v{res.latest_version}\n{res.url}")
+            else:
+                upd_lbl.grid_remove()
+                upd_tip.update_text("")
 
     def _schedule_filter(self, *_args: object) -> None:
         if self._search_after_id is not None:
@@ -137,12 +208,12 @@ class ModListPanel(ctk.CTkFrame):
         visible_idx = 0
 
         for mod in self._mods:
-            cb, _ = self._mod_rows[mod.folder_name]
+            row_frame, *_ = self._mod_rows[mod.folder_name]
             if self._matches_query(mod, query):
-                cb.grid(row=visible_idx, column=0, sticky="w", padx=8, pady=4)
+                row_frame.grid(row=visible_idx, column=0, sticky="ew", padx=4, pady=1)
                 visible_idx += 1
             else:
-                cb.grid_remove()
+                row_frame.grid_remove()
 
         if visible_idx == 0:
             msg = (
@@ -150,7 +221,7 @@ class ModListPanel(ctk.CTkFrame):
                 if self._mods
                 else (
                     f"No mods found in SVMM_Data/modpacks/{self._active_profile_name}.\n"
-                    "Click 'Open Modpack Folder' above to add mods, then click Refresh."
+                    "Click 'Open Modpack Folder' or 'Install .zip' to add mods."
                 )
             )
             self.empty_label.configure(text=msg)
@@ -162,19 +233,19 @@ class ModListPanel(ctk.CTkFrame):
 
     def _update_count(self) -> None:
         total = len(self._mods)
-        enabled = sum(1 for _, var in self._mod_rows.values() if var.get())
+        enabled = sum(1 for _, _, var, *_ in self._mod_rows.values() if var.get())
         self.count_label.configure(text=f"{enabled} / {total} enabled")
 
     def _emit_toggle(self) -> None:
         self._update_count()
-        enabled = [folder for folder, (_, var) in self._mod_rows.items() if var.get()]
+        enabled = [folder for folder, (_, _, var, *_) in self._mod_rows.items() if var.get()]
         self._on_toggle(enabled)
 
     def select_all(self) -> None:
         query = self.search_var.get().strip().lower()
         for mod in self._mods:
             if self._matches_query(mod, query):
-                _, var = self._mod_rows[mod.folder_name]
+                _, _, var, *_ = self._mod_rows[mod.folder_name]
                 var.set(True)
         self._emit_toggle()
 
@@ -182,6 +253,6 @@ class ModListPanel(ctk.CTkFrame):
         query = self.search_var.get().strip().lower()
         for mod in self._mods:
             if self._matches_query(mod, query):
-                _, var = self._mod_rows[mod.folder_name]
+                _, _, var, *_ = self._mod_rows[mod.folder_name]
                 var.set(False)
         self._emit_toggle()
