@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,17 @@ def _is_link_or_junction(path: Path) -> bool:
     is_junction = getattr(path, "is_junction", None)
     if callable(is_junction):
         return bool(is_junction())
+    if sys.platform == "win32":
+        try:
+            lstat = os.lstat(path)
+        except OSError:
+            return False
+        reparse_tag = getattr(lstat, "st_reparse_tag", 0)
+        mount_point_tag = getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003)
+        if reparse_tag and reparse_tag == mount_point_tag:
+            return True
+        attrs = getattr(lstat, "st_file_attributes", 0)
+        return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
     return False
 
 
