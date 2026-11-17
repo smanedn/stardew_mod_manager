@@ -9,9 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, TypedDict
 
-DEFAULT_GAME_PATH = (
-    r"C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley"
-)
+DEFAULT_GAME_PATH = r"C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley"
 
 _INVALID_PROFILE_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -145,9 +143,7 @@ class ConfigManager:
                 enabled_mods = profile_data.get("enabled_mods")
                 profiles[profile_id] = {
                     "name": name if isinstance(name, str) and name.strip() else profile_id,
-                    "enabled_mods": [
-                        m for m in enabled_mods if isinstance(m, str)
-                    ]
+                    "enabled_mods": [m for m in enabled_mods if isinstance(m, str)]
                     if isinstance(enabled_mods, list)
                     else [],
                 }
@@ -273,9 +269,7 @@ class ConfigManager:
         display_name = str(raw.get("name") or candidate).strip() or candidate
         enabled_raw = raw.get("enabled_mods", [])
         enabled_mods = (
-            [m for m in enabled_raw if isinstance(m, str)]
-            if isinstance(enabled_raw, list)
-            else []
+            [m for m in enabled_raw if isinstance(m, str)] if isinstance(enabled_raw, list) else []
         )
         self.create_profile(candidate, display_name)
         self.set_enabled_mods(enabled_mods, candidate)

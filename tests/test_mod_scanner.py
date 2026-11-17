@@ -5,17 +5,19 @@ from pathlib import Path
 from src.core.mod_scanner import scan_mod_pool
 
 
-def test_scan_mod_pool_parses_bom_comments_and_trailing_commas(tmp_path: Path) -> None:
+def test_scan_mod_pool_parses_bom_comments_trailing_commas_and_escaped_quotes(
+    tmp_path: Path,
+) -> None:
     pool = tmp_path / "modpacks" / "Default"
     mod_dir = pool / "ContentPatcher"
     mod_dir.mkdir(parents=True)
     (mod_dir / "manifest.json").write_text(
         "\ufeff{\n"
         "  // Line comment\n"
-        '  "Name": "Content Patcher",\n'
+        '  "Name": "Content \\"Patcher\\"",\n'
         '  "Author": "Pathoschild",\n'
         '  "Version": "2.0.0",\n'
-        '  "UpdateKeys": ["Nexus:1915", "http://example.com//keep-url"],\n'
+        '  "UpdateKeys": ["Nexus:1915", "http://example.com//keep-url",],\n'
         "  /* Block comment */\n"
         "}\n",
         encoding="utf-8",
@@ -23,21 +25,45 @@ def test_scan_mod_pool_parses_bom_comments_and_trailing_commas(tmp_path: Path) -
 
     mods = scan_mod_pool(pool)
     assert len(mods) == 1
-    assert mods[0].name == "Content Patcher"
+    assert mods[0].name == 'Content "Patcher"'
     assert mods[0].author == "Pathoschild"
     assert mods[0].version == "2.0.0"
     assert mods[0].error is None
 
 
-def test_scan_mod_pool_handles_missing_and_invalid_manifests(tmp_path: Path) -> None:
+def test_scan_mod_pool_handles_missing_non_object_and_malformed_manifests(
+    tmp_path: Path,
+) -> None:
     pool = tmp_path / "modpacks"
     (pool / "MissingManifest").mkdir(parents=True)
+
     broken = pool / "BrokenManifest"
     broken.mkdir(parents=True)
     (broken / "manifest.json").write_text("{broken", encoding="utf-8")
+
+    array_manifest = pool / "ArrayManifest"
+    array_manifest.mkdir(parents=True)
+    (array_manifest / "manifest.json").write_text('["not", "an", "object"]', encoding="utf-8")
+
+    empty_fields = pool / "EmptyFields"
+    empty_fields.mkdir(parents=True)
+    (empty_fields / "manifest.json").write_text('{"Name": "  ", "Version": ""}', encoding="utf-8")
+
     (pool / ".hidden").mkdir(parents=True)
+    (pool / "readme.txt").write_text("ignore me", encoding="utf-8")
 
     mods = scan_mod_pool(pool)
-    assert [m.folder_name for m in mods] == ["BrokenManifest", "MissingManifest"]
+    assert [m.folder_name for m in mods] == [
+        "ArrayManifest",
+        "BrokenManifest",
+        "EmptyFields",
+        "MissingManifest",
+    ]
     assert mods[0].error is not None
-    assert not mods[1].has_manifest
+    assert mods[1].error is not None
+    assert mods[2].name == "EmptyFields" and mods[2].version == "Unknown"
+    assert not mods[3].has_manifest
+
+
+def test_scan_mod_pool_nonexistent_dir_returns_empty(tmp_path: Path) -> None:
+    assert scan_mod_pool(tmp_path / "does_not_exist") == []

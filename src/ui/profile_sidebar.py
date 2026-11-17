@@ -90,9 +90,7 @@ class ProfileSidebar(ctk.CTkFrame):
     def clear_new_profile_entry(self) -> None:
         self.new_profile_entry.delete(0, "end")
 
-    def render_profiles(
-        self, profiles: Mapping[str, ProfileData], active_profile: str
-    ) -> None:
+    def render_profiles(self, profiles: Mapping[str, ProfileData], active_profile: str) -> None:
         for widget in self.profile_list_frame.winfo_children():
             widget.destroy()
         self.profile_buttons.clear()

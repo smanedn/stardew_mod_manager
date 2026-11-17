@@ -43,9 +43,9 @@ class TopBar(ctk.CTkFrame):
         ctk.CTkButton(self, text="Browse", width=84, command=on_browse).grid(
             row=0, column=2, padx=SPACING["xs"], pady=(SPACING["md"], 4)
         )
-        ctk.CTkButton(
-            self, text="Open Modpack Folder", width=155, command=on_open_modpack
-        ).grid(row=0, column=3, padx=SPACING["xs"], pady=(SPACING["md"], 4))
+        ctk.CTkButton(self, text="Open Modpack Folder", width=155, command=on_open_modpack).grid(
+            row=0, column=3, padx=SPACING["xs"], pady=(SPACING["md"], 4)
+        )
 
         self.theme_menu = ctk.CTkOptionMenu(
             self,

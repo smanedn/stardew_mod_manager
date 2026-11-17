@@ -342,9 +342,7 @@ class SVModManagerApp(ctk.CTk):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_scan_complete(
-        self, generation: int, profile_id: str, mods: list[ModInfo]
-    ) -> None:
+    def _on_scan_complete(self, generation: int, profile_id: str, mods: list[ModInfo]) -> None:
         if generation != self._scan_generation or not self.winfo_exists():
             return
         self.mod_list.set_loading(False)

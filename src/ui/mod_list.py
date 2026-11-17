@@ -56,9 +56,7 @@ class ModListPanel(ctk.CTkFrame):
         ctk.CTkButton(filter_bar, text="Deselect All", width=92, command=self.deselect_all).grid(
             row=0, column=3, padx=3
         )
-        self.refresh_btn = ctk.CTkButton(
-            filter_bar, text="Refresh", width=76, command=on_refresh
-        )
+        self.refresh_btn = ctk.CTkButton(filter_bar, text="Refresh", width=76, command=on_refresh)
         self.refresh_btn.grid(row=0, column=4, padx=(3, 0))
 
         # --- Scrollable Mods Area ---
@@ -68,9 +66,7 @@ class ModListPanel(ctk.CTkFrame):
         )
         self.scroll_frame.grid_columnconfigure(0, weight=1)
 
-        self.empty_label = ctk.CTkLabel(
-            self.scroll_frame, text="", text_color=COLORS["text_muted"]
-        )
+        self.empty_label = ctk.CTkLabel(self.scroll_frame, text="", text_color=COLORS["text_muted"])
 
     def focus_search(self) -> None:
         self.search_entry.focus_set()
@@ -87,9 +83,7 @@ class ModListPanel(ctk.CTkFrame):
             self.empty_label.configure(text=message)
             self.empty_label.grid(row=0, column=0, padx=SPACING["md"], pady=24)
 
-    def set_mods(
-        self, mods: list[ModInfo], enabled_mods: list[str], active_profile: str
-    ) -> None:
+    def set_mods(self, mods: list[ModInfo], enabled_mods: list[str], active_profile: str) -> None:
         self._mods = mods
         self._active_profile_name = active_profile
         enabled_set = set(enabled_mods)
