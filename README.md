@@ -4,21 +4,43 @@
 
 # Stardew Valley Mod Manager (SVMM)
 
-A lightweight, dark-mode desktop mod manager for **Stardew Valley** built with Python and `customtkinter`. Each modpack has its own dedicated folder, and profile switching uses OS-level directory junctions/symlinks so mods swap instantly without copying files.
+[![CI](https://github.com/smanedn/stardew_mod_manager/actions/workflows/ci.yml/badge.svg)](https://github.com/smanedn/stardew_mod_manager/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Latest Release](https://img.shields.io/github/v/release/smanedn/stardew_mod_manager?include_prereleases)](https://github.com/smanedn/stardew_mod_manager/releases)
+
+A lightweight desktop mod manager for **Stardew Valley** built with Python and `customtkinter`. Each modpack has its own dedicated folder, and profile switching uses OS-level directory junctions/symlinks so mods swap instantly without copying files.
 
 ## Features
 
 - **Per-Modpack Folders:** Keep each modpack's mods isolated under `SVMM_Data/modpacks/<ModpackName>/`.
-- **Instant Profile Switching:** Rebuilds `SVMM_Data/profiles/<ProfileName>/` and links `Stardew Valley/Mods` using directory junctions (`mklink /J` on Windows, symlinks on macOS/Linux) with zero file copying.
+- **Instant Profile Switching:** Rebuilds `SVMM_Data/profiles/<ProfileName>/` and links `Stardew Valley/Mods` using directory junctions (`mklink /J` on Windows) or symlinks (macOS/Linux, experimental) with zero file copying.
 - **Safe Vanilla Launch:** Unlinks `Stardew Valley/Mods` and launches the base game (`Stardew Valley.exe`) without touching your mod files. Any pre-existing unmanaged `Mods` folder is safely backed up to `Mods_Backup`.
 - **Tolerant SMAPI Manifest Parser:** Reads `manifest.json` with UTF-8 BOM (`utf-8-sig`) support and safely handles comments and trailing commas.
+- **Profile Import / Export & Theme Support:** Share profile JSONs, switch between Dark / Light / System themes, and open `SMAPI-latest.txt` directly from the launch bar.
 - **Double-Click Ready:** Running `main.py` directly on Windows automatically re-launches using `.venv` if present.
+
+## Screenshots
+
+> **Note:** Add your own screenshots to `assets/screenshots/` (see `README.md` paths below).
+
+| Dark Mode | Light Mode |
+| --- | --- |
+| ![Dark Mode](assets/screenshots/main-dark.png) | ![Light Mode](assets/screenshots/main-light.png) |
+
+## Platform Support
+
+| Platform | Status | Linking Mechanism & Permissions |
+| --- | --- | --- |
+| **Windows** | **Tested** (Windows + Python 3.13; CI runs Python 3.11 & 3.13) | Uses NTFS **Directory Junctions** (`cmd /c mklink /J`). Works out of the box without Administrator privileges. |
+| **macOS** | **Experimental** (untested on hardware) | Uses POSIX **symbolic links** (`os.symlink(..., target_is_directory=True)`). Standard user permissions are sufficient on APFS/HFS+. |
+| **Linux** | **Experimental** (untested on hardware; unit tests run in CI) | Uses POSIX **symbolic links** (`os.symlink(..., target_is_directory=True)`). Requires a POSIX filesystem supporting symlinks. |
 
 ## Tech Stack
 
-- **Language:** Python 3.10+ (tested on Python 3.13)
+- **Language:** Python 3.10+
 - **GUI:** [`customtkinter`](https://github.com/TomSchimansky/CustomTkinter)
-- **Backend:** Python Standard Library (`json`, `pathlib`, `subprocess`, `os`, `shutil`)
+- **Backend:** Python Standard Library (`json`, `pathlib`, `subprocess`, `os`, `shutil`, `stat`)
 
 ## Prerequisites
 
@@ -30,7 +52,7 @@ A lightweight, dark-mode desktop mod manager for **Stardew Valley** built with P
 
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/smanedn/stardew_mod_manager.git
    cd stardew_mod_manager
    ```
 
@@ -55,7 +77,7 @@ A lightweight, dark-mode desktop mod manager for **Stardew Valley** built with P
 
 5. **Configure in the UI:**
    - Click **Browse** to select your Stardew Valley installation folder (saved locally to `SVMM_Data/config.json`).
-   - Click **Open Modpack Folder** to drop mod folders into the active modpack (`SVMM_Data/modpacks/<ProfileName>/`), then click **Refresh**.
+   - Click **Open Modpack Folder** to drop mod folders into the active modpack (`SVMM_Data/modpacks/<ProfileName>/`), then click **Refresh** (`F5`).
    - Check the mods you want enabled and click **LAUNCH MODDED (SMAPI)** or **LAUNCH VANILLA (NO MODS)**.
 
 > **Note:** This project does not use API keys, databases, or `.env` files. All user configuration is stored locally in `SVMM_Data/config.json` (ignored by Git).
@@ -70,7 +92,9 @@ stardew_mod_manager/
 ├── pyproject.toml           # Ruff and pytest configuration
 ├── .gitignore               # Ignores .venv, __pycache__, SVMM_Data, .env*, OS/IDE files
 ├── assets/
-│   └── logo.png             # Application icon and README logo
+│   ├── logo.png             # Application icon and README logo
+│   ├── logo.ico             # Windows titlebar icon
+│   └── screenshots/         # Screenshots for documentation
 ├── src/
 │   ├── __init__.py
 │   ├── core/
@@ -88,6 +112,22 @@ stardew_mod_manager/
 │       └── launch_bar.py    # Modded/Vanilla launch buttons, SMAPI log, and status bar
 └── tests/                   # Unit tests for core modules
 ```
+
+## Roadmap
+
+- [x] Per-modpack folder isolation (`SVMM_Data/modpacks/<ProfileName>/`)
+- [x] Zero-copy Windows directory junction syncing & safe `Mods_Backup`
+- [x] Tolerant SMAPI `manifest.json` parser (BOM, comments, trailing commas)
+- [x] Dark / Light / System theme switcher & profile import/export
+- [x] Ruff linting, `pytest` suite, and GitHub Actions CI
+- [ ] Recursive scanning for nested modpacks containing subfolder `manifest.json` files
+- [ ] Dependency/conflict hints using `UniqueID` and `Dependencies` in `manifest.json`
+- [ ] Optional standalone Windows `.exe` release builds via PyInstaller
+- [ ] Verified macOS and Linux runtime testing
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## License
 
