@@ -203,6 +203,11 @@ class ConfigManager:
         """Return optional user-configured Nexus Mods API key."""
         return str(self.data.get("nexus_api_key", ""))
 
+    @nexus_api_key.setter
+    def nexus_api_key(self, key: str) -> None:
+        self.data["nexus_api_key"] = key.strip()
+        self.save()
+
     @property
     def active_profile(self) -> str:
         """Return the active profile ID."""

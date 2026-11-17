@@ -61,6 +61,7 @@ from src.core.launcher import get_smapi_log_path, launch_game, validate_game_pat
 from src.core.mod_installer import install_mod_zip
 from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
+from src.core.nexus_installer import install_from_nexus
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -69,6 +70,7 @@ from src.core.updater import (
 )
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_list import ModListPanel
+from src.ui.nexus_dialog import NexusInstallDialog
 from src.ui.profile_sidebar import ProfileSidebar
 from src.ui.theme import SPACING
 from src.ui.top_bar import TopBar
@@ -164,6 +166,7 @@ class SVModManagerApp(ctk.CTk):
             on_toggle=self._on_mods_toggled,
             on_refresh=self._refresh_mods,
             on_install_zip=self._install_zip,
+            on_install_nexus=self._open_nexus_dialog,
             on_check_updates=self._check_updates,
         )
         self.mod_list.grid(
@@ -386,6 +389,39 @@ class SVModManagerApp(ctk.CTk):
         def worker() -> None:
             try:
                 installed = install_mod_zip(zip_path, modpack_dir)
+                err = None
+            except (OSError, ValueError) as exc:
+                installed = []
+                err = str(exc)
+            self.after(0, lambda: self._on_install_complete(active, installed, err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _open_nexus_dialog(self) -> None:
+        NexusInstallDialog(
+            self,
+            initial_api_key=self.config_manager.nexus_api_key,
+            on_submit=self._install_nexus,
+        )
+
+    def _install_nexus(self, raw_target: str, api_key: str) -> None:
+        if api_key != self.config_manager.nexus_api_key:
+            self.config_manager.nexus_api_key = api_key
+
+        if not raw_target:
+            self.launch_bar.set_status(
+                "Nexus install cancelled: no URL/ID entered.", level="warning"
+            )
+            return
+
+        active = self.config_manager.active_profile
+        modpack_dir = self._active_modpack_dir()
+        self.mod_list.set_loading(True, "Downloading from Nexus Mods...")
+        self.launch_bar.set_status("Downloading mod from Nexus Mods...", level="info")
+
+        def worker() -> None:
+            try:
+                installed = install_from_nexus(raw_target, api_key, modpack_dir)
                 err = None
             except (OSError, ValueError) as exc:
                 installed = []

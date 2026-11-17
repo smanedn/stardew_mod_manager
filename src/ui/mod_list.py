@@ -22,6 +22,7 @@ class ModListPanel(ctk.CTkFrame):
         on_toggle: Callable[[list[str]], None],
         on_refresh: Callable[[], None],
         on_install_zip: Callable[[], None],
+        on_install_nexus: Callable[[], None],
         on_check_updates: Callable[[], None],
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
@@ -74,20 +75,22 @@ class ModListPanel(ctk.CTkFrame):
             row=0, column=3, padx=2
         )
         self.install_btn = ctk.CTkButton(
-            filter_bar, text="Install .zip", width=86, command=on_install_zip
+            filter_bar, text="Install .zip", width=82, command=on_install_zip
         )
         self.install_btn.grid(row=0, column=4, padx=2)
+        self.nexus_btn = ctk.CTkButton(filter_bar, text="Nexus", width=66, command=on_install_nexus)
+        self.nexus_btn.grid(row=0, column=5, padx=2)
         self.update_btn = ctk.CTkButton(
             filter_bar,
             text="Updates",
-            width=74,
+            width=72,
             fg_color=COLORS["neutral_btn"],
             hover_color=COLORS["neutral_btn_hover"],
             command=on_check_updates,
         )
-        self.update_btn.grid(row=0, column=5, padx=2)
-        self.refresh_btn = ctk.CTkButton(filter_bar, text="Refresh", width=72, command=on_refresh)
-        self.refresh_btn.grid(row=0, column=6, padx=(2, 0))
+        self.update_btn.grid(row=0, column=6, padx=2)
+        self.refresh_btn = ctk.CTkButton(filter_bar, text="Refresh", width=70, command=on_refresh)
+        self.refresh_btn.grid(row=0, column=7, padx=(2, 0))
 
         # --- Scrollable Mods Area ---
         self.scroll_frame = ctk.CTkScrollableFrame(self)
@@ -109,6 +112,7 @@ class ModListPanel(ctk.CTkFrame):
         state = "disabled" if loading else "normal"
         self.refresh_btn.configure(state=state)
         self.install_btn.configure(state=state)
+        self.nexus_btn.configure(state=state)
         if loading:
             for row_frame, *_ in self._mod_rows.values():
                 row_frame.grid_remove()
