@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Stardew Valley Mod Manager Logo" width="128" />
+</p>
+
 # Stardew Valley Mod Manager (SVMM)
 
 A lightweight, dark-mode desktop mod manager for **Stardew Valley** built with Python and `customtkinter`. Each modpack has its own dedicated folder, and profile switching uses OS-level directory junctions/symlinks so mods swap instantly without copying files.
@@ -60,17 +64,29 @@ A lightweight, dark-mode desktop mod manager for **Stardew Valley** built with P
 
 ```text
 stardew_mod_manager/
-├── main.py                  # Entry point, .venv bootstrap, and customtkinter GUI
-├── requirements.txt         # Python dependencies (customtkinter)
+├── main.py                  # Entry point, .venv bootstrap, and app orchestrator
+├── requirements.txt         # Runtime dependency (customtkinter)
+├── requirements-dev.txt     # Dev dependencies (pytest, ruff)
+├── pyproject.toml           # Ruff and pytest configuration
 ├── .gitignore               # Ignores .venv, __pycache__, SVMM_Data, .env*, OS/IDE files
-└── src/
-    ├── __init__.py
-    └── core/
-        ├── __init__.py
-        ├── config.py        # ConfigManager for SVMM_Data/config.json
-        ├── mod_scanner.py   # Mod folder scanner and SMAPI manifest.json parser
-        ├── mod_manager.py   # Profile junction/symlink sync and Mods_Backup handling
-        └── launcher.py      # SMAPI (modded) and Vanilla game launcher
+├── assets/
+│   └── logo.png             # Application icon and README logo
+├── src/
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py        # ConfigManager, validation, and profile import/export
+│   │   ├── mod_scanner.py   # Mod folder scanner and SMAPI manifest.json parser
+│   │   ├── mod_manager.py   # Profile junction/symlink sync and Mods_Backup handling
+│   │   └── launcher.py      # Path validation, SMAPI log locator, and game launcher
+│   └── ui/
+│       ├── __init__.py
+│       ├── theme.py         # Light/dark design tokens and typography
+│       ├── top_bar.py       # Game path bar, validation status, and theme switcher
+│       ├── profile_sidebar.py # Modpack list, create/delete, and import/export
+│       ├── mod_list.py      # Debounced search, cached mod rows, and counter badge
+│       └── launch_bar.py    # Modded/Vanilla launch buttons, SMAPI log, and status bar
+└── tests/                   # Unit tests for core modules
 ```
 
 ## License

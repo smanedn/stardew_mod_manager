@@ -38,9 +38,23 @@ def _create_dir_link(link_path: Path, target_path: Path) -> None:
         )
         if result.returncode != 0:
             error_msg = (result.stderr or result.stdout).strip() or "mklink /J failed"
-            raise OSError(f"Failed to create junction '{link_path}' -> '{target_path}': {error_msg}")
+            raise OSError(
+                f"Failed to create junction '{link_path}' -> '{target_path}': {error_msg}"
+            )
     else:
         os.symlink(target_path, link_path, target_is_directory=True)
+
+
+def _backup_unmanaged_mods(game_dir: Path, mods_path: Path) -> Path:
+    """Rename an existing unmanaged Mods folder to Mods_Backup (or Mods_Backup_N)."""
+    backup_path = game_dir / "Mods_Backup"
+    if backup_path.exists():
+        idx = 1
+        while (game_dir / f"Mods_Backup_{idx}").exists():
+            idx += 1
+        backup_path = game_dir / f"Mods_Backup_{idx}"
+    mods_path.rename(backup_path)
+    return backup_path
 
 
 def sync_profile(
@@ -54,8 +68,23 @@ def sync_profile(
     profile_dir = (Path(profiles_root) / profile_id).resolve()
     profile_dir.mkdir(parents=True, exist_ok=True)
 
-    # Clear existing links or stale entries in the profile folder
+    desired = {
+        mod_folder: (pool_dir / mod_folder)
+        for mod_folder in enabled_mods
+        if (pool_dir / mod_folder).is_dir()
+    }
+
+    # Remove stale entries or broken/mismatched links; keep valid matching links intact
+    existing_valid: set[str] = set()
     for entry in list(profile_dir.iterdir()):
+        if entry.name in desired and _is_link_or_junction(entry):
+            try:
+                if entry.resolve() == desired[entry.name].resolve():
+                    existing_valid.add(entry.name)
+                    continue
+            except OSError:
+                pass
+
         if _is_link_or_junction(entry):
             _remove_link_or_junction(entry)
         elif entry.is_dir():
@@ -63,12 +92,9 @@ def sync_profile(
         else:
             entry.unlink()
 
-    for mod_folder in enabled_mods:
-        target = pool_dir / mod_folder
-        if not target.is_dir():
-            continue
-        link = profile_dir / mod_folder
-        _create_dir_link(link, target)
+    for mod_folder, target in desired.items():
+        if mod_folder not in existing_valid:
+            _create_dir_link(profile_dir / mod_folder, target)
 
     return profile_dir
 
@@ -89,13 +115,7 @@ def link_game_mods(game_path: str | Path, profile_dir: str | Path) -> tuple[bool
     if _is_link_or_junction(mods_path):
         _remove_link_or_junction(mods_path)
     elif mods_path.exists():
-        backup_path = game_dir / "Mods_Backup"
-        if backup_path.exists():
-            idx = 1
-            while (game_dir / f"Mods_Backup_{idx}").exists():
-                idx += 1
-            backup_path = game_dir / f"Mods_Backup_{idx}"
-        mods_path.rename(backup_path)
+        backup_path = _backup_unmanaged_mods(game_dir, mods_path)
         backup_msg = f" (backed up existing Mods to {backup_path.name})"
 
     try:
@@ -118,13 +138,7 @@ def unlink_game_mods(game_path: str | Path) -> tuple[bool, str]:
         return True, "Unlinked Mods folder for Vanilla launch."
 
     if mods_path.exists():
-        backup_path = game_dir / "Mods_Backup"
-        if backup_path.exists():
-            idx = 1
-            while (game_dir / f"Mods_Backup_{idx}").exists():
-                idx += 1
-            backup_path = game_dir / f"Mods_Backup_{idx}"
-        mods_path.rename(backup_path)
+        backup_path = _backup_unmanaged_mods(game_dir, mods_path)
         return True, f"Moved unmanaged Mods folder to {backup_path.name} for Vanilla launch."
 
     return True, "No Mods folder to unlink."
