@@ -22,8 +22,6 @@ A lightweight desktop mod manager for **Stardew Valley** built with Python and `
 
 ## Screenshots
 
-> **Note:** Add your own screenshots to `assets/screenshots/` (see `README.md` paths below).
-
 | Dark Mode | Light Mode |
 | --- | --- |
 | ![Dark Mode](assets/screenshots/main-dark.png) | ![Light Mode](assets/screenshots/main-light.png) |
