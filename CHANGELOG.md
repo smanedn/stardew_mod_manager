@@ -5,9 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-11-17
 
 ### Added
+- In-app **Nexus Mods Browser** (`src/core/nexus_browser.py`, `src/ui/nexus_dialog.py`) with Popular / Latest Updated / New Mods tabs, keyword search, mod icons, and 10–100 per-page pagination.
+- Direct **Nexus Mods Installer** (`src/core/nexus_installer.py`) with 1-click install (Nexus Premium), automatic `Downloads` folder watcher for browser downloads, and `nxm://` protocol handler registration (`src/core/nxm_handler.py`).
+- Recursive scanning for nested modpack subfolders (`src/core/mod_scanner.py`, `src/core/mod_manager.py`).
+- **Nexus Mods Update Provider** (`NexusUpdateProvider`) supporting `Nexus:<id>` `UpdateKeys` with optional `nexus_api_key` in `SVMM_Data/config.json`.
 - Dependency and duplicate `UniqueID` conflict detection (`src/core/dependencies.py`) with `⚠` tooltips and pre-launch confirmation.
 - Safe `.zip` mod archive installer (`src/core/mod_installer.py`) with zip-slip path traversal protection and multi-mod folder support.
 - Mod update checker (`src/core/updater.py`) with `UpdateProvider` interface, `GitHubUpdateProvider`, TTL caching, and graceful offline handling.
