@@ -283,7 +283,7 @@ class ModListPanel(ctk.CTkFrame):
                 if self._mods
                 else (
                     f"No mods found in SVMM_Data/modpacks/{self._active_profile_name}.\n"
-                    "Click 'Open Modpack Folder' or 'Install .zip' to add mods."
+                    "Drag & drop .zip/.7z files here, or click 'Install .zip/.7z' / 'Nexus'."
                 )
             )
             self.empty_label.configure(text=msg)

@@ -6,7 +6,11 @@ from pathlib import Path
 import py7zr
 import pytest
 
-from src.core.mod_installer import install_mod_archive, install_mod_zip
+from src.core.mod_installer import (
+    install_mod_archive,
+    install_mod_zip,
+    parse_dropped_archive_paths,
+)
 
 
 def test_install_single_and_multiple_mod_folders(tmp_path: Path) -> None:
@@ -86,3 +90,18 @@ def test_install_7z_archive_extracts_mod_and_blocks_traversal(tmp_path: Path) ->
     bad_file.write_text("not a zip or 7z", encoding="utf-8")
     with pytest.raises(ValueError, match="Unsupported or corrupted archive"):
         install_mod_archive(bad_file, modpack)
+
+
+def test_parse_dropped_archive_paths_handles_braces_and_filters_extensions(
+    tmp_path: Path,
+) -> None:
+    zip_spaces = tmp_path / "mod with spaces.zip"
+    mod_7z = tmp_path / "pack.7z"
+    ignored_txt = tmp_path / "notes.txt"
+    zip_spaces.write_text("", encoding="utf-8")
+    mod_7z.write_text("", encoding="utf-8")
+    ignored_txt.write_text("", encoding="utf-8")
+
+    raw = f"{{{zip_spaces}}} {mod_7z} {ignored_txt} {tmp_path / 'missing.zip'}"
+    parsed = parse_dropped_archive_paths(raw)
+    assert parsed == [zip_spaces, mod_7z]

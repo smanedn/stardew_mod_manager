@@ -32,6 +32,7 @@ jobs:
             --icon assets/logo.ico `
             --add-data "assets;assets" `
             --collect-all customtkinter `
+            --collect-all tkinterdnd2 `
             --name SVModManager `
             main.py
 

@@ -55,6 +55,25 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+
+    _HAS_DND = True
+except ImportError:
+    DND_FILES = "DND_Files"
+    _HAS_DND = False
+
+    class _DummyDnDWrapper:
+        pass
+
+    class TkinterDnD:  # type: ignore[no-redef]
+        DnDWrapper = _DummyDnDWrapper
+
+        @staticmethod
+        def _require(_widget: object) -> str:
+            return ""
+
+
 from src import __version__
 from src.core.config import ConfigManager
 from src.core.dependencies import (
@@ -68,7 +87,7 @@ from src.core.launcher import (
     launch_game,
     validate_game_path,
 )
-from src.core.mod_installer import install_mod_archive
+from src.core.mod_installer import install_mod_archive, parse_dropped_archive_paths
 from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
 from src.core.modlist_export import export_modlist
@@ -111,11 +130,16 @@ def _open_in_file_manager(target: Path) -> None:
         subprocess.Popen(["xdg-open", str(target)])
 
 
-class SVModManagerApp(ctk.CTk):
+class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
     """Main application window coordinating core logic and UI components."""
 
     def __init__(self) -> None:
         super().__init__()
+        if _HAS_DND:
+            try:
+                self.TkdndVersion = TkinterDnD._require(self)
+            except tk.TclError:
+                pass
         self.title(f"Stardew Valley Mod Manager v{__version__}")
         self.geometry("1020x680")
         self.minsize(800, 540)
@@ -135,6 +159,7 @@ class SVModManagerApp(ctk.CTk):
         self._current_mods: list[ModInfo] = []
         self._build_layout()
         self._bind_shortcuts()
+        self._setup_drag_and_drop()
 
         self._validate_game_path(self.config_manager.game_path)
         self._refresh_profiles()
@@ -235,6 +260,42 @@ class SVModManagerApp(ctk.CTk):
         self.bind("<Control-f>", lambda _e: self.mod_list.focus_search())
         self.bind("<Escape>", lambda _e: self.mod_list.clear_search())
         self.bind("<F5>", lambda _e: self._refresh_mods())
+
+    def _setup_drag_and_drop(self) -> None:
+        if not _HAS_DND:
+            return
+        try:
+            self.mod_list.drop_target_register(DND_FILES)  # type: ignore[attr-defined]
+            self.mod_list.dnd_bind("<<Drop>>", self._on_files_dropped)  # type: ignore[attr-defined]
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _on_files_dropped(self, event: object) -> None:
+        raw_data = str(getattr(event, "data", "") or "")
+        archives = parse_dropped_archive_paths(raw_data)
+        if not archives:
+            self.launch_bar.set_status(
+                "Drop .zip or .7z mod archives to install them.",
+                level="warning",
+                auto_clear_ms=4000,
+            )
+            return
+
+        active = self.config_manager.active_profile
+        modpack_dir = self._active_modpack_dir()
+        self.mod_list.set_loading(True, f"Installing {len(archives)} dropped archive(s)...")
+
+        def worker() -> None:
+            installed_all: list[str] = []
+            err: str | None = None
+            try:
+                for archive in archives:
+                    installed_all.extend(install_mod_archive(archive, modpack_dir))
+            except (OSError, ValueError) as exc:
+                err = str(exc)
+            self.after(0, lambda: self._on_install_complete(active, installed_all, err))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _ensure_modpack_folders(self) -> None:
         for pid in self.config_manager.profiles:

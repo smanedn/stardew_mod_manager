@@ -109,3 +109,37 @@ def install_mod_archive(archive_path: str | Path, modpack_dir: str | Path) -> li
 def install_mod_zip(zip_path: str | Path, modpack_dir: str | Path) -> list[str]:
     """Backward-compatible wrapper for install_mod_archive."""
     return install_mod_archive(zip_path, modpack_dir)
+
+
+def parse_dropped_archive_paths(raw_drop_data: str) -> list[Path]:
+    """Parse a TkDND <<Drop>> data string into existing .zip/.7z archive paths."""
+    if not raw_drop_data or not raw_drop_data.strip():
+        return []
+
+    tokens: list[str] = []
+    i = 0
+    n = len(raw_drop_data)
+    while i < n:
+        if raw_drop_data[i].isspace():
+            i += 1
+            continue
+        if raw_drop_data[i] == "{":
+            end = raw_drop_data.find("}", i + 1)
+            if end == -1:
+                tokens.append(raw_drop_data[i + 1 :].strip())
+                break
+            tokens.append(raw_drop_data[i + 1 : end])
+            i = end + 1
+        else:
+            end = i
+            while end < n and not raw_drop_data[end].isspace():
+                end += 1
+            tokens.append(raw_drop_data[i:end])
+            i = end
+
+    archives: list[Path] = []
+    for tok in tokens:
+        path = Path(tok)
+        if path.is_file() and path.suffix.lower() in (".zip", ".7z"):
+            archives.append(path)
+    return archives
