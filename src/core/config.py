@@ -198,6 +198,11 @@ class ConfigManager:
         """Return optional user-configured GitHub token for higher API rate limits."""
         return str(self.data.get("github_token", ""))
 
+    @github_token.setter
+    def github_token(self, token: str) -> None:
+        self.data["github_token"] = token.strip()
+        self.save()
+
     @property
     def nexus_api_key(self) -> str:
         """Return optional user-configured Nexus Mods API key."""

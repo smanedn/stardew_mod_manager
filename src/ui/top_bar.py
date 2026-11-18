@@ -21,6 +21,7 @@ class TopBar(ctk.CTkFrame):
         on_browse: Callable[[], None],
         on_open_modpack: Callable[[], None],
         on_theme_change: Callable[[str], None],
+        on_open_settings: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
         self._on_path_change = on_path_change
@@ -54,9 +55,17 @@ class TopBar(ctk.CTkFrame):
             command=self._handle_theme,
         )
         self.theme_menu.set(initial_theme.capitalize())
-        self.theme_menu.grid(
-            row=0, column=4, padx=(SPACING["xs"], SPACING["md"]), pady=(SPACING["md"], 4)
-        )
+        self.theme_menu.grid(row=0, column=4, padx=SPACING["xs"], pady=(SPACING["md"], 4))
+
+        if on_open_settings is not None:
+            ctk.CTkButton(
+                self,
+                text="⚙",
+                width=36,
+                fg_color=COLORS["neutral_btn"],
+                hover_color=COLORS["neutral_btn_hover"],
+                command=on_open_settings,
+            ).grid(row=0, column=5, padx=(SPACING["xs"], SPACING["md"]), pady=(SPACING["md"], 4))
 
         self.validation_label = ctk.CTkLabel(
             self,

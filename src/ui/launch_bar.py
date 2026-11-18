@@ -19,6 +19,7 @@ class LaunchBar(ctk.CTkFrame):
         on_launch_modded: Callable[[], None],
         on_launch_vanilla: Callable[[], None],
         on_open_smapi_log: Callable[[], None],
+        on_open_saves: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
         self.grid_columnconfigure(0, weight=1)
@@ -64,12 +65,24 @@ class LaunchBar(ctk.CTkFrame):
             self,
             text="SMAPI Log",
             height=42,
-            width=100,
+            width=96,
             fg_color=COLORS["surface_alt"],
             hover_color=COLORS["border"],
             text_color=COLORS["text_primary"],
             command=on_open_smapi_log,
-        ).grid(row=0, column=2, padx=(0, SPACING["md"]), pady=(SPACING["md"], 4))
+        ).grid(row=0, column=2, padx=(0, SPACING["sm"]), pady=(SPACING["md"], 4))
+
+        if on_open_saves is not None:
+            ctk.CTkButton(
+                self,
+                text="Saves",
+                height=42,
+                width=74,
+                fg_color=COLORS["surface_alt"],
+                hover_color=COLORS["border"],
+                text_color=COLORS["text_primary"],
+                command=on_open_saves,
+            ).grid(row=0, column=3, padx=(0, SPACING["md"]), pady=(SPACING["md"], 4))
 
         self.status_label = ctk.CTkLabel(
             self,
@@ -79,7 +92,7 @@ class LaunchBar(ctk.CTkFrame):
             text_color=COLORS["text_muted"],
         )
         self.status_label.grid(
-            row=1, column=0, columnspan=2, sticky="ew", padx=SPACING["lg"], pady=(2, 8)
+            row=1, column=0, columnspan=3, sticky="ew", padx=SPACING["lg"], pady=(2, 8)
         )
 
         ctk.CTkLabel(
@@ -88,7 +101,7 @@ class LaunchBar(ctk.CTkFrame):
             anchor="e",
             font=font_small(),
             text_color=COLORS["text_muted"],
-        ).grid(row=1, column=2, sticky="e", padx=SPACING["lg"], pady=(2, 8))
+        ).grid(row=1, column=3, sticky="e", padx=SPACING["lg"], pady=(2, 8))
 
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"

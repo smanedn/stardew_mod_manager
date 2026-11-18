@@ -86,6 +86,8 @@ from src.ui.mod_details_dialog import ModDetailsDialog
 from src.ui.mod_list import ModListPanel
 from src.ui.nexus_dialog import NexusBrowserDialog
 from src.ui.profile_sidebar import ProfileSidebar
+from src.ui.save_backup_dialog import SaveBackupDialog
+from src.ui.settings_dialog import SettingsDialog
 from src.ui.smapi_log_dialog import SmapiLogDialog
 from src.ui.theme import SPACING
 from src.ui.top_bar import TopBar
@@ -94,6 +96,7 @@ MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
 PROFILES_DIR = PROJECT_ROOT / "SVMM_Data" / "profiles"
 CONFIG_FILE = PROJECT_ROOT / "SVMM_Data" / "config.json"
 UPDATE_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "update_cache.json"
+SAVE_BACKUPS_DIR = PROJECT_ROOT / "SVMM_Data" / "save_backups"
 LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
 ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
 
@@ -149,6 +152,7 @@ class SVModManagerApp(ctk.CTk):
             on_browse=self._browse_game_path,
             on_open_modpack=self._open_modpack_folder,
             on_theme_change=self._on_theme_changed,
+            on_open_settings=self._open_settings,
         )
         self.top_bar.grid(
             row=0,
@@ -202,6 +206,7 @@ class SVModManagerApp(ctk.CTk):
             on_launch_modded=self._launch_modded,
             on_launch_vanilla=self._launch_vanilla,
             on_open_smapi_log=self._open_smapi_log,
+            on_open_saves=self._open_save_backups,
         )
         self.launch_bar.grid(
             row=2,
@@ -270,6 +275,33 @@ class SVModManagerApp(ctk.CTk):
             )
             return
         SmapiLogDialog(self, log_path=log_path, on_open_external=_open_in_file_manager)
+
+    def _open_save_backups(self) -> None:
+        SaveBackupDialog(
+            self,
+            backups_root=SAVE_BACKUPS_DIR,
+            on_open_folder=_open_in_file_manager,
+            on_status=lambda msg, lvl: self.launch_bar.set_status(
+                msg, level=lvl, auto_clear_ms=4000
+            ),
+        )
+
+    def _open_settings(self) -> None:
+        SettingsDialog(
+            self,
+            github_token=self.config_manager.github_token,
+            nexus_api_key=self.config_manager.nexus_api_key,
+            update_cache_path=UPDATE_CACHE_FILE,
+            on_save=self._save_settings,
+            on_cache_cleared=lambda: self.launch_bar.set_status(
+                "Cleared update cache.", level="info", auto_clear_ms=3000
+            ),
+        )
+
+    def _save_settings(self, github_token: str, nexus_api_key: str) -> None:
+        self.config_manager.github_token = github_token
+        self.config_manager.nexus_api_key = nexus_api_key
+        self.launch_bar.set_status("Saved settings.", level="success", auto_clear_ms=3000)
 
     def _on_theme_changed(self, mode: str) -> None:
         self.config_manager.appearance_mode = mode
