@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-11-18
+
+### Added
+- **1-Click "Fix Deps" Button** (`src/core/dependencies.py`, `src/ui/mod_list.py`): Automatically detects and enables disabled mods in the active modpack that satisfy required dependencies.
+- **In-App SMAPI Log Viewer** (`src/core/smapi_log.py`, `src/ui/smapi_log_dialog.py`): Parses `SMAPI-latest.txt` into **Errors**, **Warnings**, and **Full Log** tabs with an **Open in Editor** option.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added
