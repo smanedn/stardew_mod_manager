@@ -8,7 +8,9 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
+from src.core.mod_config import get_mod_config_path
 from src.core.mod_scanner import ModInfo
+from src.ui.mod_config_dialog import ModConfigDialog
 from src.ui.theme import COLORS, SPACING, font_bold, font_small, font_title
 
 
@@ -99,22 +101,34 @@ class ModDetailsDialog(ctk.CTkToplevel):
         ctk.CTkButton(
             footer,
             text="Uninstall Mod",
-            width=120,
+            width=116,
             fg_color=COLORS["danger"],
             hover_color=COLORS["danger_hover"],
             command=self._confirm_uninstall,
         ).grid(row=0, column=0, sticky="w")
 
+        has_config = get_mod_config_path(mod.path).is_file()
+        ctk.CTkButton(
+            footer,
+            text="Edit Config",
+            width=104,
+            state="normal" if has_config else "disabled",
+            command=self._open_config_editor,
+        ).grid(row=0, column=1, sticky="e", padx=(0, 8))
+
         ctk.CTkButton(
             footer,
             text="Open Folder",
-            width=110,
+            width=104,
             fg_color=COLORS["neutral_btn"],
             hover_color=COLORS["neutral_btn_hover"],
             command=lambda: on_open_folder(mod.path),
-        ).grid(row=0, column=1, sticky="e", padx=(0, 8))
+        ).grid(row=0, column=2, sticky="e", padx=(0, 8))
 
-        ctk.CTkButton(footer, text="Close", width=90, command=self.destroy).grid(row=0, column=2)
+        ctk.CTkButton(footer, text="Close", width=80, command=self.destroy).grid(row=0, column=3)
+
+    def _open_config_editor(self) -> None:
+        ModConfigDialog(self, mod_name=self._mod.name, mod_path=self._mod.path)
 
     def _confirm_uninstall(self) -> None:
         confirmed = messagebox.askyesno(
