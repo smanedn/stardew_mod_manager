@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-11-18
+
+### Added
+- **Save Game Backup & Restore** (`src/core/save_backup.py`, `src/ui/save_backup_dialog.py`): Snapshot and restore your Stardew Valley `Saves` folder as `.zip` archives in `SVMM_Data/save_backups/` via the **Saves** button.
+- **In-App Settings Dialog (`⚙`)** (`src/ui/settings_dialog.py`, `src/core/config.py`): Configure optional `github_token` and `nexus_api_key` and clear `update_cache.json` directly from the UI.
+
 ## [0.5.1] - 2026-11-18
 
 ### Added
