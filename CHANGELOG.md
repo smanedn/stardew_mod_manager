@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-18
+
+### Added
+- **Mod Details & Safe Uninstall** (`src/ui/mod_details_dialog.py`, `src/core/mod_manager.py`): View full `manifest.json` metadata (`UniqueID`, `MinimumApiVersion`, `Description`, `Dependencies`, `UpdateKeys`), open mod folders, and safely uninstall mods from the active modpack.
+- **In-App Mod `config.json` Editor** (`src/core/mod_config.py`, `src/ui/mod_config_dialog.py`): Edit and format per-mod `config.json` files directly inside the app with JSON syntax validation before saving.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added
