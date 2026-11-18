@@ -108,7 +108,7 @@ from src.ui.profile_sidebar import ProfileSidebar
 from src.ui.save_backup_dialog import SaveBackupDialog
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.smapi_log_dialog import SmapiLogDialog
-from src.ui.theme import SPACING
+from src.ui.theme import COLORS, SPACING
 from src.ui.top_bar import TopBar
 
 MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
@@ -141,8 +141,9 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             except tk.TclError:
                 pass
         self.title(f"Stardew Valley Mod Manager v{__version__}")
-        self.geometry("1020x680")
-        self.minsize(800, 540)
+        self.geometry("1120x720")
+        self.minsize(880, 580)
+        self.configure(fg_color=COLORS["bg_app"])
         self._set_app_icon()
         if sys.platform == "win32":
             # Override customtkinter's delayed default titlebar icon
@@ -169,27 +170,11 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        self.top_bar = TopBar(
-            self,
-            initial_path=self.config_manager.game_path,
-            initial_theme=self.config_manager.appearance_mode,
-            on_path_change=self._on_game_path_changed,
-            on_browse=self._browse_game_path,
-            on_open_modpack=self._open_modpack_folder,
-            on_theme_change=self._on_theme_changed,
-            on_open_settings=self._open_settings,
-        )
-        self.top_bar.grid(
-            row=0,
-            column=0,
-            columnspan=2,
-            sticky="ew",
-            padx=SPACING["lg"],
-            pady=(SPACING["lg"], SPACING["sm"]),
-        )
-
         self.sidebar = ProfileSidebar(
             self,
+            version=__version__,
+            logo_path=LOGO_FILE,
+            initial_theme=self.config_manager.appearance_mode,
             on_select=self._select_profile,
             on_create=self._create_profile,
             on_delete=self._delete_active_profile,
@@ -197,13 +182,26 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_export=self._export_profile,
             on_duplicate=self._duplicate_profile,
             on_share_modlist=self._share_modlist,
+            on_open_saves=self._open_save_backups,
+            on_open_smapi_log=self._open_smapi_log,
+            on_open_settings=self._open_settings,
+            on_theme_change=self._on_theme_changed,
         )
-        self.sidebar.grid(
-            row=1,
-            column=0,
-            sticky="nsew",
-            padx=(SPACING["lg"], SPACING["sm"]),
-            pady=SPACING["sm"],
+        self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
+
+        self.top_bar = TopBar(
+            self,
+            initial_path=self.config_manager.game_path,
+            on_path_change=self._on_game_path_changed,
+            on_browse=self._browse_game_path,
+            on_open_modpack=self._open_modpack_folder,
+        )
+        self.top_bar.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=SPACING["lg"],
+            pady=(SPACING["lg"], SPACING["sm"]),
         )
 
         self.mod_list = ModListPanel(
@@ -221,22 +219,18 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             row=1,
             column=1,
             sticky="nsew",
-            padx=(SPACING["sm"], SPACING["lg"]),
-            pady=SPACING["sm"],
+            padx=SPACING["lg"],
+            pady=SPACING["xs"],
         )
 
         self.launch_bar = LaunchBar(
             self,
-            version=__version__,
             on_launch_modded=self._launch_modded,
             on_launch_vanilla=self._launch_vanilla,
-            on_open_smapi_log=self._open_smapi_log,
-            on_open_saves=self._open_save_backups,
         )
         self.launch_bar.grid(
             row=2,
-            column=0,
-            columnspan=2,
+            column=1,
             sticky="ew",
             padx=SPACING["lg"],
             pady=(SPACING["sm"], SPACING["lg"]),
@@ -369,9 +363,9 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         ctk.set_appearance_mode(mode)
 
     def _refresh_profiles(self) -> None:
-        self.sidebar.render_profiles(
-            self.config_manager.profiles, self.config_manager.active_profile
-        )
+        active = self.config_manager.active_profile
+        self.sidebar.render_profiles(self.config_manager.profiles, active)
+        self.top_bar.set_active_modpack(active)
 
     def _select_profile(self, profile_id: str) -> None:
         self.config_manager.active_profile = profile_id
@@ -714,6 +708,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
 
     def _on_mods_toggled(self, enabled_mods: list[str]) -> None:
         self.config_manager.set_enabled_mods(enabled_mods)
+        self._refresh_profiles()
         self._refresh_dependency_warnings(set(enabled_mods))
 
     def _refresh_dependency_warnings(self, enabled_set: set[str]) -> None:
