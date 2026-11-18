@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-18
+
+### Changed
+- **Complete GUI Revamp** (`src/ui/`, `main.py`): Redesigned with a full-height navigation sidebar, layered light/dark palette (`theme.py`), focused top header with live game status pill, two-row mod toolbar, structured 2-line mod cards with `CTkSwitch` toggles, and a grounded launch dock.
+- **App Logo**: Updated `assets/logo.png` and `assets/logo.ico` to a pixel-art Stardew chicken icon with a golden modding gear badge.
+
+### Added
+- **Drag-and-Drop Archive Install** (`main.py`, `src/core/mod_installer.py`, `.github/workflows/release.yml`): Drag and drop `.zip` or `.7z` mod archives directly onto the mod list to install them into the active modpack (powered by `tkinterdnd2` with graceful fallback).
+
 ## [0.5.2] - 2026-11-18
 
 ### Added
