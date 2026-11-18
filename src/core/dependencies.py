@@ -100,3 +100,30 @@ def format_issue_summary(issues: dict[str, list[ModIssue]], mods: list[ModInfo])
         for issue in mod_issues:
             lines.append(f"• {mod_name}: {issue.message}")
     return "\n".join(lines)
+
+
+def resolve_enableable_dependencies(mods: list[ModInfo], enabled_folders: set[str]) -> list[str]:
+    """Return disabled mod folder names needed to satisfy enabled mods' required deps."""
+    id_to_mod: dict[str, ModInfo] = {}
+    folder_to_mod: dict[str, ModInfo] = {}
+    for mod in mods:
+        folder_to_mod[mod.folder_name] = mod
+        if mod.unique_id:
+            id_to_mod.setdefault(mod.unique_id.lower(), mod)
+
+    to_enable: list[str] = []
+    seen_folders = set(enabled_folders)
+    queue = [folder_to_mod[f] for f in enabled_folders if f in folder_to_mod]
+
+    while queue:
+        current = queue.pop(0)
+        for dep in current.dependencies:
+            if not dep.is_required:
+                continue
+            target_mod = id_to_mod.get(dep.unique_id.lower())
+            if target_mod and target_mod.folder_name not in seen_folders:
+                seen_folders.add(target_mod.folder_name)
+                to_enable.append(target_mod.folder_name)
+                queue.append(target_mod)
+
+    return to_enable

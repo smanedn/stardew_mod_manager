@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.core.dependencies import analyze_mod_dependencies, format_issue_summary
+from src.core.dependencies import (
+    analyze_mod_dependencies,
+    format_issue_summary,
+    resolve_enableable_dependencies,
+)
 from src.core.mod_scanner import ModDependency, ModInfo
 
 
@@ -110,3 +114,44 @@ def test_minimum_version_and_minimum_api_version_checks(tmp_path: Path) -> None:
         )
         == {}
     )
+
+
+def test_resolve_enableable_dependencies_finds_transitive_required_mods(tmp_path: Path) -> None:
+    mods = [
+        ModInfo(
+            folder_name="Expansion",
+            name="Expansion",
+            version="1.0.0",
+            path=tmp_path / "Expansion",
+            unique_id="Author.Expansion",
+            dependencies=(
+                ModDependency(unique_id="Author.Core", is_required=True),
+                ModDependency(unique_id="Author.Optional", is_required=False),
+            ),
+        ),
+        ModInfo(
+            folder_name="Core",
+            name="Core",
+            version="1.0.0",
+            path=tmp_path / "Core",
+            unique_id="author.core",
+            dependencies=(ModDependency(unique_id="Author.Base", is_required=True),),
+        ),
+        ModInfo(
+            folder_name="Base",
+            name="Base",
+            version="1.0.0",
+            path=tmp_path / "Base",
+            unique_id="Author.Base",
+        ),
+        ModInfo(
+            folder_name="Optional",
+            name="Optional",
+            version="1.0.0",
+            path=tmp_path / "Optional",
+            unique_id="Author.Optional",
+        ),
+    ]
+
+    to_enable = resolve_enableable_dependencies(mods, {"Expansion"})
+    assert to_enable == ["Core", "Base"]

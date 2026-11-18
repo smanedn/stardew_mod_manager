@@ -26,6 +26,7 @@ class ModListPanel(ctk.CTkFrame):
         on_check_updates: Callable[[], None],
         on_show_details: Callable[[ModInfo], None] | None = None,
         on_update_mod: Callable[[UpdateResult], None] | None = None,
+        on_fix_deps: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
         self.grid_columnconfigure(0, weight=1)
@@ -95,6 +96,14 @@ class ModListPanel(ctk.CTkFrame):
         self.update_btn.grid(row=0, column=6, padx=2)
         self.refresh_btn = ctk.CTkButton(filter_bar, text="Refresh", width=70, command=on_refresh)
         self.refresh_btn.grid(row=0, column=7, padx=(2, 0))
+        self.fix_deps_btn = ctk.CTkButton(
+            filter_bar,
+            text="Fix Deps",
+            width=82,
+            fg_color=COLORS["warning_text"],
+            text_color=("#111827", "#111827"),
+            command=on_fix_deps,
+        )
 
         # --- Scrollable Mods Area ---
         self.scroll_frame = ctk.CTkScrollableFrame(self)
@@ -196,6 +205,19 @@ class ModListPanel(ctk.CTkFrame):
     def _show_details(self, mod: ModInfo) -> None:
         if self._on_show_details is not None:
             self._on_show_details(mod)
+
+    def set_fixable_deps_count(self, count: int) -> None:
+        if count > 0:
+            self.fix_deps_btn.configure(text=f"Fix Deps ({count})")
+            self.fix_deps_btn.grid(row=0, column=8, padx=(4, 0))
+        else:
+            self.fix_deps_btn.grid_remove()
+
+    def sync_enabled(self, enabled_mods: list[str]) -> None:
+        enabled_set = set(enabled_mods)
+        for folder, (_, _, var, *_) in self._mod_rows.items():
+            var.set(folder in enabled_set)
+        self._update_count()
 
     def set_issues(self, issues: dict[str, list[ModIssue]]) -> None:
         for folder, (_, _, _, warn_lbl, warn_tip, _, _) in self._mod_rows.items():

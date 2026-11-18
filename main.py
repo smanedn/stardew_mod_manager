@@ -57,7 +57,11 @@ import customtkinter as ctk
 
 from src import __version__
 from src.core.config import ConfigManager
-from src.core.dependencies import analyze_mod_dependencies, format_issue_summary
+from src.core.dependencies import (
+    analyze_mod_dependencies,
+    format_issue_summary,
+    resolve_enableable_dependencies,
+)
 from src.core.launcher import (
     get_installed_smapi_version,
     get_smapi_log_path,
@@ -82,6 +86,7 @@ from src.ui.mod_details_dialog import ModDetailsDialog
 from src.ui.mod_list import ModListPanel
 from src.ui.nexus_dialog import NexusBrowserDialog
 from src.ui.profile_sidebar import ProfileSidebar
+from src.ui.smapi_log_dialog import SmapiLogDialog
 from src.ui.theme import SPACING
 from src.ui.top_bar import TopBar
 
@@ -181,6 +186,7 @@ class SVModManagerApp(ctk.CTk):
             on_check_updates=self._check_updates,
             on_show_details=self._show_mod_details,
             on_update_mod=self._update_single_mod,
+            on_fix_deps=self._fix_missing_dependencies,
         )
         self.mod_list.grid(
             row=1,
@@ -263,7 +269,7 @@ class SVModManagerApp(ctk.CTk):
                 auto_clear_ms=5000,
             )
             return
-        _open_in_file_manager(log_path)
+        SmapiLogDialog(self, log_path=log_path, on_open_external=_open_in_file_manager)
 
     def _on_theme_changed(self, mode: str) -> None:
         self.config_manager.appearance_mode = mode
@@ -608,20 +614,37 @@ class SVModManagerApp(ctk.CTk):
         self.mod_list.set_loading(False)
         enabled = self.config_manager.get_enabled_mods(profile_id)
         self.mod_list.set_mods(mods, enabled, profile_id)
-        smapi_ver = get_installed_smapi_version(self.config_manager.game_path)
-        issues = analyze_mod_dependencies(mods, set(enabled), smapi_version=smapi_ver)
-        self.mod_list.set_issues(issues)
+        self._refresh_dependency_warnings(set(enabled))
         self.launch_bar.set_status(
             f"Found {len(mods)} mod(s) in modpack '{profile_id}'.", level="info"
         )
 
     def _on_mods_toggled(self, enabled_mods: list[str]) -> None:
         self.config_manager.set_enabled_mods(enabled_mods)
+        self._refresh_dependency_warnings(set(enabled_mods))
+
+    def _refresh_dependency_warnings(self, enabled_set: set[str]) -> None:
         smapi_ver = get_installed_smapi_version(self.config_manager.game_path)
-        issues = analyze_mod_dependencies(
-            self._current_mods, set(enabled_mods), smapi_version=smapi_ver
-        )
+        issues = analyze_mod_dependencies(self._current_mods, enabled_set, smapi_version=smapi_ver)
         self.mod_list.set_issues(issues)
+        fixable = resolve_enableable_dependencies(self._current_mods, enabled_set)
+        self.mod_list.set_fixable_deps_count(len(fixable))
+
+    def _fix_missing_dependencies(self) -> None:
+        active = self.config_manager.active_profile
+        current = self.config_manager.get_enabled_mods(active)
+        to_enable = resolve_enableable_dependencies(self._current_mods, set(current))
+        if not to_enable:
+            return
+        updated = current + to_enable
+        self.config_manager.set_enabled_mods(updated, active)
+        self.mod_list.sync_enabled(updated)
+        self._refresh_dependency_warnings(set(updated))
+        self.launch_bar.set_status(
+            f"Enabled {len(to_enable)} missing dependency mod(s): {', '.join(to_enable)}",
+            level="success",
+            auto_clear_ms=5000,
+        )
 
     def _show_mod_details(self, mod: ModInfo) -> None:
         ModDetailsDialog(
