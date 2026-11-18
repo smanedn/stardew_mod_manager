@@ -24,12 +24,14 @@ class ModListPanel(ctk.CTkFrame):
         on_install_zip: Callable[[], None],
         on_install_nexus: Callable[[], None],
         on_check_updates: Callable[[], None],
+        on_show_details: Callable[[ModInfo], None] | None = None,
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
         self._on_toggle = on_toggle
+        self._on_show_details = on_show_details
         self._mods: list[ModInfo] = []
         # folder -> (row_frame, checkbox, var, warning_label, warning_tip, update_label, update_tip)
         self._mod_rows: dict[
@@ -157,6 +159,20 @@ class ModListPanel(ctk.CTkFrame):
             )
             upd_tip = ToolTip(upd_lbl, "")
 
+            if self._on_show_details is not None:
+                info_btn = ctk.CTkButton(
+                    row_frame,
+                    text="Info",
+                    width=48,
+                    height=24,
+                    font=font_small(),
+                    fg_color=COLORS["surface_alt"],
+                    hover_color=COLORS["border"],
+                    text_color=COLORS["text_primary"],
+                    command=lambda m=mod: self._show_details(m),
+                )
+                info_btn.grid(row=0, column=3, padx=(4, 4))
+
             self._mod_rows[mod.folder_name] = (
                 row_frame,
                 cb,
@@ -168,6 +184,10 @@ class ModListPanel(ctk.CTkFrame):
             )
 
         self._apply_filter()
+
+    def _show_details(self, mod: ModInfo) -> None:
+        if self._on_show_details is not None:
+            self._on_show_details(mod)
 
     def set_issues(self, issues: dict[str, list[ModIssue]]) -> None:
         for folder, (_, _, _, warn_lbl, warn_tip, _, _) in self._mod_rows.items():

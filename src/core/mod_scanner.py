@@ -27,6 +27,8 @@ class ModInfo:
     path: Path
     unique_id: str = ""
     author: str = ""
+    description: str = ""
+    minimum_api_version: str = ""
     has_manifest: bool = True
     error: str | None = None
     dependencies: tuple[ModDependency, ...] = ()
@@ -215,6 +217,8 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
             version = str(manifest.get("Version") or "Unknown").strip() or "Unknown"
             unique_id = str(manifest.get("UniqueID") or "").strip()
             author = str(manifest.get("Author") or "").strip()
+            description = str(manifest.get("Description") or "").strip()
+            min_api = str(manifest.get("MinimumApiVersion") or "").strip()
             mods.append(
                 ModInfo(
                     folder_name=rel_folder,
@@ -223,6 +227,8 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
                     path=entry,
                     unique_id=unique_id,
                     author=author,
+                    description=description,
+                    minimum_api_version=min_api,
                     has_manifest=True,
                     dependencies=_parse_dependencies(manifest.get("Dependencies")),
                     update_keys=_parse_update_keys(manifest.get("UpdateKeys")),

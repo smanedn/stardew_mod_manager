@@ -168,3 +168,33 @@ def unlink_game_mods(game_path: str | Path) -> tuple[bool, str]:
         return True, f"Moved unmanaged Mods folder to {backup_path.name} for Vanilla launch."
 
     return True, "No Mods folder to unlink."
+
+
+def uninstall_mod(
+    mod_folder: str,
+    modpack_dir: str | Path,
+    profiles_root: str | Path | None = None,
+    profile_id: str | None = None,
+) -> None:
+    """Safely remove a mod folder from modpack_dir and unlink it from the profile."""
+    pack_root = Path(modpack_dir).resolve()
+    target = (pack_root / mod_folder).resolve()
+    if target == pack_root or not target.is_relative_to(pack_root):
+        raise ValueError(f"Unsafe mod folder path: {mod_folder}")
+    if not target.exists():
+        raise FileNotFoundError(f"Mod folder not found: {target}")
+
+    shutil.rmtree(target)
+
+    # Clean up empty intermediate parent folders for nested mods
+    parent = target.parent
+    while parent != pack_root and parent.is_dir():
+        if any(parent.iterdir()):
+            break
+        parent.rmdir()
+        parent = parent.parent
+
+    if profiles_root is not None and profile_id:
+        profile_link = Path(profiles_root) / profile_id / mod_folder
+        if _is_link_or_junction(profile_link):
+            _remove_link_or_junction(profile_link)

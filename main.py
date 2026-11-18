@@ -59,7 +59,7 @@ from src.core.config import ConfigManager
 from src.core.dependencies import analyze_mod_dependencies, format_issue_summary
 from src.core.launcher import get_smapi_log_path, launch_game, validate_game_path
 from src.core.mod_installer import install_mod_zip
-from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
+from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
 from src.core.nexus_installer import install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
@@ -70,6 +70,7 @@ from src.core.updater import (
     UpdateResult,
 )
 from src.ui.launch_bar import LaunchBar
+from src.ui.mod_details_dialog import ModDetailsDialog
 from src.ui.mod_list import ModListPanel
 from src.ui.nexus_dialog import NexusBrowserDialog
 from src.ui.profile_sidebar import ProfileSidebar
@@ -169,6 +170,7 @@ class SVModManagerApp(ctk.CTk):
             on_install_zip=self._install_zip,
             on_install_nexus=self._open_nexus_dialog,
             on_check_updates=self._check_updates,
+            on_show_details=self._show_mod_details,
         )
         self.mod_list.grid(
             row=1,
@@ -526,6 +528,36 @@ class SVModManagerApp(ctk.CTk):
         self.config_manager.set_enabled_mods(enabled_mods)
         issues = analyze_mod_dependencies(self._current_mods, set(enabled_mods))
         self.mod_list.set_issues(issues)
+
+    def _show_mod_details(self, mod: ModInfo) -> None:
+        ModDetailsDialog(
+            self,
+            mod=mod,
+            on_open_folder=_open_in_file_manager,
+            on_uninstall=self._uninstall_mod,
+        )
+
+    def _uninstall_mod(self, mod: ModInfo) -> None:
+        active = self.config_manager.active_profile
+        try:
+            uninstall_mod(
+                mod.folder_name,
+                self._active_modpack_dir(),
+                profiles_root=PROFILES_DIR,
+                profile_id=active,
+            )
+        except (OSError, ValueError) as exc:
+            self.launch_bar.set_status(f"Uninstall failed: {exc}", level="error")
+            return
+
+        remaining = [
+            m for m in self.config_manager.get_enabled_mods(active) if m != mod.folder_name
+        ]
+        self.config_manager.set_enabled_mods(remaining, active)
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Uninstalled '{mod.name}' from '{active}'.", level="success", auto_clear_ms=4000
+        )
 
     def _launch_modded(self) -> None:
         game_path = self.top_bar.get_path()

@@ -17,6 +17,8 @@ def test_scan_mod_pool_parses_bom_comments_trailing_commas_and_escaped_quotes(
         '  "Name": "Content \\"Patcher\\"",\n'
         '  "Author": "Pathoschild",\n'
         '  "Version": "2.0.0",\n'
+        '  "Description": "Loads content packs.",\n'
+        '  "MinimumApiVersion": "4.0.0",\n'
         '  "UpdateKeys": ["Nexus:1915", "http://example.com//keep-url",],\n'
         "  /* Block comment */\n"
         "}\n",
@@ -28,6 +30,8 @@ def test_scan_mod_pool_parses_bom_comments_trailing_commas_and_escaped_quotes(
     assert mods[0].name == 'Content "Patcher"'
     assert mods[0].author == "Pathoschild"
     assert mods[0].version == "2.0.0"
+    assert mods[0].description == "Loads content packs."
+    assert mods[0].minimum_api_version == "4.0.0"
     assert mods[0].error is None
 
 

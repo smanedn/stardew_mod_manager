@@ -3,7 +3,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from src.core.mod_manager import link_game_mods, sync_profile, unlink_game_mods
+import pytest
+
+from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 
 
 def test_mods_backup_increments_when_backup_already_exists(tmp_path: Path) -> None:
@@ -125,3 +127,20 @@ def test_sync_profile_supports_nested_mod_folders(tmp_path: Path) -> None:
     sync_profile("SVE", ["Bundle/SubModB"], pool, profiles)
     assert not (profile_dir / "Bundle" / "SubModA").exists()
     assert (profile_dir / "Bundle" / "SubModB").is_dir()
+
+
+def test_uninstall_mod_removes_nested_mod_and_rejects_traversal(tmp_path: Path) -> None:
+    pool = tmp_path / "modpacks" / "Default"
+    profiles = tmp_path / "profiles"
+    (pool / "Pack" / "ModA").mkdir(parents=True)
+    (pool / "Pack" / "ModA" / "manifest.json").write_text('{"Name": "A"}', encoding="utf-8")
+
+    profile_dir = sync_profile("Default", ["Pack/ModA"], pool, profiles)
+    assert (profile_dir / "Pack" / "ModA").exists()
+
+    with pytest.raises(ValueError, match="Unsafe mod folder"):
+        uninstall_mod("../../outside", pool)
+
+    uninstall_mod("Pack/ModA", pool, profiles_root=profiles, profile_id="Default")
+    assert not (pool / "Pack").exists()
+    assert not (profile_dir / "Pack" / "ModA").exists()
