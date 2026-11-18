@@ -22,6 +22,7 @@ class ProfileSidebar(ctk.CTkFrame):
         on_import: Callable[[], None],
         on_export: Callable[[], None],
         on_duplicate: Callable[[], None],
+        on_share_modlist: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master, width=240, border_width=1, border_color=COLORS["border"])
         self.grid_propagate(False)
@@ -80,6 +81,15 @@ class ProfileSidebar(ctk.CTkFrame):
             hover_color=COLORS["neutral_btn_hover"],
             command=on_duplicate,
         ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(SPACING["xs"], 0))
+
+        if on_share_modlist is not None:
+            ctk.CTkButton(
+                io_frame,
+                text="Share Modlist",
+                fg_color=COLORS["neutral_btn"],
+                hover_color=COLORS["neutral_btn_hover"],
+                command=on_share_modlist,
+            ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(SPACING["xs"], 0))
 
         self.delete_btn = ctk.CTkButton(
             self,

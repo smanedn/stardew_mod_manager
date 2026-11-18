@@ -3,9 +3,10 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+import py7zr
 import pytest
 
-from src.core.mod_installer import install_mod_zip
+from src.core.mod_installer import install_mod_archive, install_mod_zip
 
 
 def test_install_single_and_multiple_mod_folders(tmp_path: Path) -> None:
@@ -64,3 +65,24 @@ def test_install_mod_zip_rejects_archive_without_manifest(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="No manifest.json"):
         install_mod_zip(archive, tmp_path / "modpack")
+
+
+def test_install_7z_archive_extracts_mod_and_blocks_traversal(tmp_path: Path) -> None:
+    modpack = tmp_path / "modpacks" / "Default"
+    src_mod = tmp_path / "src_mod" / "My7zMod"
+    src_mod.mkdir(parents=True)
+    (src_mod / "manifest.json").write_text('{"Name": "My7zMod"}', encoding="utf-8")
+
+    archive_7z = tmp_path / "my7zmod.7z"
+    with py7zr.SevenZipFile(archive_7z, "w") as szf:
+        szf.writeall(src_mod, "My7zMod")
+
+    installed = install_mod_archive(archive_7z, modpack)
+    assert installed == ["My7zMod"]
+    assert (modpack / "My7zMod" / "manifest.json").is_file()
+
+    # Corrupt / unsupported file fails cleanly
+    bad_file = tmp_path / "not_an_archive.rar"
+    bad_file.write_text("not a zip or 7z", encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsupported or corrupted archive"):
+        install_mod_archive(bad_file, modpack)

@@ -64,9 +64,10 @@ from src.core.launcher import (
     launch_game,
     validate_game_path,
 )
-from src.core.mod_installer import install_mod_zip
+from src.core.mod_installer import install_mod_archive
 from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
+from src.core.modlist_export import export_modlist
 from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.updater import (
@@ -161,6 +162,7 @@ class SVModManagerApp(ctk.CTk):
             on_import=self._import_profile,
             on_export=self._export_profile,
             on_duplicate=self._duplicate_profile,
+            on_share_modlist=self._share_modlist,
         )
         self.sidebar.grid(
             row=1,
@@ -386,20 +388,24 @@ class SVModManagerApp(ctk.CTk):
         )
 
     def _install_zip(self) -> None:
-        zip_path = filedialog.askopenfilename(
-            title="Select Mod Archive (.zip)",
-            filetypes=[("Zip archives", "*.zip")],
+        archive_path = filedialog.askopenfilename(
+            title="Select Mod Archive (.zip or .7z)",
+            filetypes=[
+                ("Mod archives", "*.zip *.7z"),
+                ("Zip archives", "*.zip"),
+                ("7z archives", "*.7z"),
+            ],
         )
-        if not zip_path:
+        if not archive_path:
             return
 
         active = self.config_manager.active_profile
         modpack_dir = self._active_modpack_dir()
-        self.mod_list.set_loading(True, f"Installing {Path(zip_path).name}...")
+        self.mod_list.set_loading(True, f"Installing {Path(archive_path).name}...")
 
         def worker() -> None:
             try:
-                installed = install_mod_zip(zip_path, modpack_dir)
+                installed = install_mod_archive(archive_path, modpack_dir)
                 err = None
             except (OSError, ValueError) as exc:
                 installed = []
@@ -407,6 +413,27 @@ class SVModManagerApp(ctk.CTk):
             self.after(0, lambda: self._on_install_complete(active, installed, err))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _share_modlist(self) -> None:
+        active = self.config_manager.active_profile
+        enabled = set(self.config_manager.get_enabled_mods(active))
+        dest = filedialog.asksaveasfilename(
+            title="Export Shareable Multiplayer Modlist",
+            defaultextension=".md",
+            initialfile=f"{active}_modlist.md",
+            filetypes=[("Markdown (*.md)", "*.md"), ("JSON (*.json)", "*.json")],
+        )
+        if not dest:
+            return
+        try:
+            export_modlist(dest, active, self._current_mods, enabled)
+            self.launch_bar.set_status(
+                f"Exported modlist for '{active}' to {Path(dest).name}.",
+                level="success",
+                auto_clear_ms=4000,
+            )
+        except OSError as exc:
+            self.launch_bar.set_status(f"Export failed: {exc}", level="error")
 
     def _open_nexus_dialog(self) -> None:
         active = self.config_manager.active_profile

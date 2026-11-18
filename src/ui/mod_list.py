@@ -79,7 +79,7 @@ class ModListPanel(ctk.CTkFrame):
             row=0, column=3, padx=2
         )
         self.install_btn = ctk.CTkButton(
-            filter_bar, text="Install .zip", width=82, command=on_install_zip
+            filter_bar, text="Install .zip/.7z", width=98, command=on_install_zip
         )
         self.install_btn.grid(row=0, column=4, padx=2)
         self.nexus_btn = ctk.CTkButton(filter_bar, text="Nexus", width=66, command=on_install_nexus)

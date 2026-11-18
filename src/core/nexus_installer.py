@@ -9,12 +9,11 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.core.mod_installer import install_mod_zip
+from src.core.mod_installer import install_mod_archive
 
 _NEXUS_API_BASE = "https://api.nexusmods.com/v1/games/stardewvalley"
 _NEXUS_URL_RE = re.compile(
@@ -153,18 +152,10 @@ def install_from_nexus(
         archive_name = (
             Path(urllib.parse.urlparse(cdn_url).path).name or f"nexus_{target.mod_id}.zip"
         )
-        if not archive_name.lower().endswith(".zip"):
-            archive_name = f"{archive_name}.zip"
         archive_path = Path(tmp_dir) / archive_name
 
         req = urllib.request.Request(cdn_url, headers={"User-Agent": "SVMM-NexusInstaller"})
         with urllib.request.urlopen(req, timeout=timeout) as resp, archive_path.open("wb") as dst:
             shutil.copyfileobj(resp, dst)
 
-        if not zipfile.is_zipfile(archive_path):
-            raise ValueError(
-                "Downloaded archive is not a .zip file (e.g. .7z or .rar). "
-                "Please download and extract it manually into your modpack folder."
-            )
-
-        return install_mod_zip(archive_path, modpack_dir)
+        return install_mod_archive(archive_path, modpack_dir)

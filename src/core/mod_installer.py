@@ -1,4 +1,4 @@
-"""Safe .zip mod archive installer with zip-slip protection."""
+"""Safe .zip and .7z mod archive installer with zip-slip protection."""
 
 from __future__ import annotations
 
@@ -7,9 +7,11 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import py7zr
 
-def _validate_zip_member(member_name: str, stage_root: Path) -> Path:
-    """Ensure a zip member path cannot escape stage_root (zip-slip protection)."""
+
+def _validate_archive_member(member_name: str, stage_root: Path) -> Path:
+    """Ensure an archive member path cannot escape stage_root (zip-slip protection)."""
     if not member_name or member_name.startswith(("/", "\\")):
         raise ValueError(f"Unsafe archive path: {member_name}")
     # Reject Windows drive letters like C:foo
@@ -41,40 +43,55 @@ def _find_mod_roots(stage_root: Path) -> list[Path]:
     return mod_roots
 
 
-def install_mod_zip(zip_path: str | Path, modpack_dir: str | Path) -> list[str]:
-    """Safely extract a .zip mod archive into modpack_dir and return installed folder names."""
-    archive_path = Path(zip_path)
-    if not archive_path.is_file():
-        raise FileNotFoundError(f"Archive not found: {archive_path}")
+def _extract_zip(archive_path: Path, stage_root: Path) -> None:
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        members = zf.infolist()
+        validated: list[tuple[zipfile.ZipInfo, Path]] = [
+            (info, _validate_archive_member(info.filename, stage_root)) for info in members
+        ]
+        for info, target in validated:
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info, "r") as src, target.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+
+
+def _extract_7z(archive_path: Path, stage_root: Path) -> None:
+    with py7zr.SevenZipFile(archive_path, mode="r") as szf:
+        for name in szf.getnames():
+            _validate_archive_member(name, stage_root)
+        szf.extractall(path=stage_root)
+
+
+def install_mod_archive(archive_path: str | Path, modpack_dir: str | Path) -> list[str]:
+    """Safely extract a .zip or .7z mod archive into modpack_dir and return folder names."""
+    src_path = Path(archive_path)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"Archive not found: {src_path}")
 
     dest_root = Path(modpack_dir)
     dest_root.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         stage_root = Path(tmp_dir)
+        suffix = src_path.suffix.lower()
 
-        with zipfile.ZipFile(archive_path, "r") as zf:
-            members = zf.infolist()
-            # Validate all entries before extracting anything
-            validated: list[tuple[zipfile.ZipInfo, Path]] = [
-                (info, _validate_zip_member(info.filename, stage_root)) for info in members
-            ]
-            for info, target in validated:
-                if info.is_dir():
-                    target.mkdir(parents=True, exist_ok=True)
-                else:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(info, "r") as src, target.open("wb") as dst:
-                        shutil.copyfileobj(src, dst)
+        if suffix == ".7z" or (suffix != ".zip" and py7zr.is_7zfile(src_path)):
+            _extract_7z(src_path, stage_root)
+        elif zipfile.is_zipfile(src_path):
+            _extract_zip(src_path, stage_root)
+        else:
+            raise ValueError(f"Unsupported or corrupted archive format: {src_path.name}")
 
         mod_roots = _find_mod_roots(stage_root)
-        installed: list[str] = []
-
         if not mod_roots:
             raise ValueError("No manifest.json found inside archive.")
 
+        installed: list[str] = []
         for mod_root in mod_roots:
-            folder_name = archive_path.stem if mod_root == stage_root else mod_root.name
+            folder_name = src_path.stem if mod_root == stage_root else mod_root.name
             dest_dir = dest_root / folder_name
             if dest_dir.exists():
                 shutil.rmtree(dest_dir)
@@ -87,3 +104,8 @@ def install_mod_zip(zip_path: str | Path, modpack_dir: str | Path) -> list[str]:
             installed.append(folder_name)
 
         return installed
+
+
+def install_mod_zip(zip_path: str | Path, modpack_dir: str | Path) -> list[str]:
+    """Backward-compatible wrapper for install_mod_archive."""
+    return install_mod_archive(zip_path, modpack_dir)
