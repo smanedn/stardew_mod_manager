@@ -60,3 +60,53 @@ def test_duplicate_unique_id_conflict_detected(tmp_path: Path) -> None:
     issues = analyze_mod_dependencies(mods, {"ModV1", "ModV2"})
     assert "ModV1" in issues and "ModV2" in issues
     assert issues["ModV1"][0].kind == "duplicate_id"
+
+
+def test_minimum_version_and_minimum_api_version_checks(tmp_path: Path) -> None:
+    mods = [
+        ModInfo(
+            folder_name="Expansion",
+            name="Expansion",
+            version="1.0.0",
+            path=tmp_path / "Expansion",
+            unique_id="Author.Expansion",
+            minimum_api_version="4.1.0",
+            dependencies=(
+                ModDependency(
+                    unique_id="Pathoschild.ContentPatcher",
+                    is_required=True,
+                    minimum_version="2.5.0",
+                ),
+            ),
+        ),
+        ModInfo(
+            folder_name="CP",
+            name="Content Patcher",
+            version="2.0.0",
+            path=tmp_path / "CP",
+            unique_id="Pathoschild.ContentPatcher",
+        ),
+    ]
+
+    issues = analyze_mod_dependencies(mods, {"Expansion", "CP"}, smapi_version="4.0.8")
+    kinds = {i.kind for i in issues["Expansion"]}
+    assert kinds == {"version_too_low", "smapi_version_too_low"}
+
+    # Passes when both dependency and SMAPI meet minimum versions
+    assert (
+        analyze_mod_dependencies(
+            [
+                mods[0],
+                ModInfo(
+                    folder_name="CP",
+                    name="Content Patcher",
+                    version="2.5.0",
+                    path=tmp_path / "CP",
+                    unique_id="Pathoschild.ContentPatcher",
+                ),
+            ],
+            {"Expansion", "CP"},
+            smapi_version="4.1.0",
+        )
+        == {}
+    )

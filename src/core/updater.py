@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -12,7 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from src.core.mod_installer import install_mod_zip
 from src.core.mod_scanner import ModInfo
+from src.core.nexus_installer import install_from_nexus
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,8 @@ class UpdateResult:
     current_version: str
     latest_version: str = ""
     url: str = ""
+    download_url: str = ""
+    update_key: str = ""
     has_update: bool = False
     error: str | None = None
 
@@ -79,6 +85,18 @@ class GitHubUpdateProvider:
         html_url = str(payload.get("html_url") or f"https://github.com/{repo}/releases").strip()
         if not tag:
             return None
+
+        zip_url = ""
+        assets = payload.get("assets")
+        if isinstance(assets, list):
+            for asset in assets:
+                if isinstance(asset, dict):
+                    dl = str(asset.get("browser_download_url") or "").strip()
+                    if dl.lower().endswith(".zip") and dl.startswith("https://"):
+                        zip_url = dl
+                        break
+
+        self._last_download_url = zip_url
         return tag.lstrip("vV"), html_url
 
 
@@ -167,11 +185,13 @@ class UpdateChecker:
 
             cached = cache.get(supported_key)
             latest_info: tuple[str, str] | None = None
+            download_url = ""
 
             if isinstance(cached, dict):
                 ts = cached.get("timestamp")
                 ver = cached.get("version")
                 url = cached.get("url")
+                dl = cached.get("download_url", "")
                 if (
                     isinstance(ts, (int, float))
                     and (now - ts) < self.cache_ttl_seconds
@@ -179,16 +199,19 @@ class UpdateChecker:
                     and isinstance(url, str)
                 ):
                     latest_info = (ver, url)
+                    download_url = dl if isinstance(dl, str) else ""
 
             if latest_info is None:
                 provider = next(p for p in self.providers if p.supports(supported_key))
                 try:
                     latest_info = provider.fetch_latest(supported_key, timeout=timeout)
+                    download_url = str(getattr(provider, "_last_download_url", "") or "")
                     if latest_info is not None:
                         cache[supported_key] = {
                             "timestamp": now,
                             "version": latest_info[0],
                             "url": latest_info[1],
+                            "download_url": download_url,
                         }
                         cache_dirty = True
                 except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
@@ -197,6 +220,7 @@ class UpdateChecker:
                             folder_name=mod.folder_name,
                             mod_name=mod.name,
                             current_version=mod.version,
+                            update_key=supported_key,
                             error=f"Update check failed: {exc}",
                         )
                     )
@@ -213,6 +237,8 @@ class UpdateChecker:
                     current_version=mod.version,
                     latest_version=latest_ver,
                     url=release_url,
+                    download_url=download_url,
+                    update_key=supported_key,
                     has_update=is_newer_version(mod.version, latest_ver),
                 )
             )
@@ -221,3 +247,30 @@ class UpdateChecker:
             self._save_cache(cache)
 
         return results
+
+
+def install_mod_update(
+    result: UpdateResult,
+    modpack_dir: str | Path,
+    nexus_api_key: str = "",
+    github_token: str = "",
+    timeout: float = 30.0,
+) -> list[str]:
+    """Download and install an available mod update into modpack_dir."""
+    key_lower = result.update_key.lower()
+    if key_lower.startswith("nexus:"):
+        mod_id = result.update_key.split(":", 1)[1].split("@", 1)[0].strip()
+        return install_from_nexus(mod_id, nexus_api_key, modpack_dir, timeout=timeout)
+
+    if key_lower.startswith("github:") and result.download_url.startswith("https://"):
+        headers = {"User-Agent": "SVMM-UpdateChecker"}
+        if github_token.strip():
+            headers["Authorization"] = f"Bearer {github_token.strip()}"
+        req = urllib.request.Request(result.download_url, headers=headers)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = Path(tmp_dir) / f"{result.folder_name.replace('/', '_')}.zip"
+            with urllib.request.urlopen(req, timeout=timeout) as resp, zip_path.open("wb") as dst:
+                shutil.copyfileobj(resp, dst)
+            return install_mod_zip(zip_path, modpack_dir)
+
+    raise ValueError("No direct .zip download available for this release; open the release page.")

@@ -4,6 +4,7 @@ import io
 import json
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,8 @@ from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
     UpdateChecker,
+    UpdateResult,
+    install_mod_update,
     is_newer_version,
 )
 
@@ -145,3 +148,42 @@ def test_nexus_provider_requires_api_key_and_parses_mod_version(
     latest = with_key.fetch_latest("Nexus:1915@optional")
     assert latest == ("2.3.1", "https://www.nexusmods.com/stardewvalley/mods/1915")
     assert captured_headers.get("apikey") == "my-nexus-key"
+
+
+def test_install_mod_update_downloads_github_zip_asset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w") as zf:
+        zf.writestr("MyMod/manifest.json", '{"Name": "MyMod", "Version": "2.0.0"}')
+    zip_bytes = zip_buf.getvalue()
+
+    class _FakeResp:
+        def __init__(self, data: bytes) -> None:
+            self._stream = io.BytesIO(data)
+
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, size: int = -1) -> bytes:
+            return self._stream.read(size)
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda _req, timeout=30.0: _FakeResp(zip_bytes))
+
+    modpack = tmp_path / "modpacks" / "Default"
+    res = UpdateResult(
+        folder_name="MyMod",
+        mod_name="MyMod",
+        current_version="1.0.0",
+        latest_version="2.0.0",
+        url="https://github.com/user/repo/releases/tag/v2.0.0",
+        download_url="https://github.com/user/repo/releases/download/v2.0.0/MyMod.zip",
+        update_key="GitHub:user/repo",
+        has_update=True,
+    )
+    installed = install_mod_update(res, modpack)
+    assert installed == ["MyMod"]
+    assert '"2.0.0"' in (modpack / "MyMod" / "manifest.json").read_text(encoding="utf-8")

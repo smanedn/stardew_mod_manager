@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **1-Click Mod Updates** (`src/core/updater.py`, `src/ui/mod_list.py`): `↑ vX.Y.Z` badges are now clickable buttons that download and install `.zip` release assets for `GitHub:owner/repo` mods (or trigger Nexus updates / open the release page).
+- **Dependency `MinimumVersion` & `MinimumApiVersion` Checks** (`src/core/dependencies.py`, `src/core/launcher.py`): Reads the installed SMAPI version from `StardewModdingAPI.deps.json` and warns when an enabled dependency or SMAPI installation is older than required.
+
 ## [0.4.0] - 2026-11-18
 
 ### Added

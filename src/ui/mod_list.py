@@ -25,6 +25,7 @@ class ModListPanel(ctk.CTkFrame):
         on_install_nexus: Callable[[], None],
         on_check_updates: Callable[[], None],
         on_show_details: Callable[[ModInfo], None] | None = None,
+        on_update_mod: Callable[[UpdateResult], None] | None = None,
     ) -> None:
         super().__init__(master, border_width=1, border_color=COLORS["border"])
         self.grid_columnconfigure(0, weight=1)
@@ -32,8 +33,9 @@ class ModListPanel(ctk.CTkFrame):
 
         self._on_toggle = on_toggle
         self._on_show_details = on_show_details
+        self._on_update_mod = on_update_mod
         self._mods: list[ModInfo] = []
-        # folder -> (row_frame, checkbox, var, warning_label, warning_tip, update_label, update_tip)
+        # folder -> (row_frame, checkbox, var, warning_label, warning_tip, update_btn, update_tip)
         self._mod_rows: dict[
             str,
             tuple[
@@ -42,7 +44,7 @@ class ModListPanel(ctk.CTkFrame):
                 ctk.BooleanVar,
                 ctk.CTkLabel,
                 ToolTip,
-                ctk.CTkLabel,
+                ctk.CTkButton,
                 ToolTip,
             ],
         ] = {}
@@ -154,10 +156,16 @@ class ModListPanel(ctk.CTkFrame):
             )
             warn_tip = ToolTip(warn_lbl, "")
 
-            upd_lbl = ctk.CTkLabel(
-                row_frame, text="", font=font_small(), text_color=COLORS["success_text"]
+            upd_btn = ctk.CTkButton(
+                row_frame,
+                text="",
+                width=72,
+                height=24,
+                font=font_small(),
+                fg_color=COLORS["success"],
+                hover_color=COLORS["success_hover"],
             )
-            upd_tip = ToolTip(upd_lbl, "")
+            upd_tip = ToolTip(upd_btn, "")
 
             if self._on_show_details is not None:
                 info_btn = ctk.CTkButton(
@@ -179,7 +187,7 @@ class ModListPanel(ctk.CTkFrame):
                 var,
                 warn_lbl,
                 warn_tip,
-                upd_lbl,
+                upd_btn,
                 upd_tip,
             )
 
@@ -202,15 +210,23 @@ class ModListPanel(ctk.CTkFrame):
 
     def set_updates(self, results: list[UpdateResult]) -> None:
         by_folder = {r.folder_name: r for r in results}
-        for folder, (_, _, _, _, _, upd_lbl, upd_tip) in self._mod_rows.items():
+        for folder, (_, _, _, _, _, upd_btn, upd_tip) in self._mod_rows.items():
             res = by_folder.get(folder)
             if res and res.has_update:
-                upd_lbl.configure(text=f"↑ v{res.latest_version}")
-                upd_lbl.grid(row=0, column=2, padx=(4, 6))
-                upd_tip.update_text(f"Update available: v{res.latest_version}\n{res.url}")
+                upd_btn.configure(
+                    text=f"↑ v{res.latest_version}",
+                    state="normal",
+                    command=lambda r=res: self._trigger_update(r),
+                )
+                upd_btn.grid(row=0, column=2, padx=(4, 4))
+                upd_tip.update_text(f"Click to update to v{res.latest_version}\n{res.url}")
             else:
-                upd_lbl.grid_remove()
+                upd_btn.grid_remove()
                 upd_tip.update_text("")
+
+    def _trigger_update(self, result: UpdateResult) -> None:
+        if self._on_update_mod is not None:
+            self._on_update_mod(result)
 
     def _schedule_filter(self, *_args: object) -> None:
         if self._search_after_id is not None:

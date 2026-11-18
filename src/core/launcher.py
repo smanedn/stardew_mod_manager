@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -44,6 +45,28 @@ def get_smapi_log_path() -> Path | None:
 
     log_path = base / "StardewValley" / "ErrorLogs" / "SMAPI-latest.txt"
     return log_path if log_path.is_file() else None
+
+
+def get_installed_smapi_version(game_path: str | Path) -> str | None:
+    """Read the installed SMAPI version from StardewModdingAPI.deps.json if present."""
+    deps_file = Path(game_path) / "StardewModdingAPI.deps.json"
+    if not deps_file.is_file():
+        return None
+    try:
+        data = json.loads(deps_file.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    targets = data.get("targets")
+    if not isinstance(targets, dict):
+        return None
+    for libs in targets.values():
+        if not isinstance(libs, dict):
+            continue
+        for key in libs:
+            if isinstance(key, str) and key.startswith("StardewModdingAPI/"):
+                return key.split("/", 1)[1].strip() or None
+    return None
 
 
 def launch_game(game_path: str, modded: bool) -> tuple[bool, str]:

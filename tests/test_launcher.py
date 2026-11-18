@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -7,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from src.core.launcher import launch_game, validate_game_path
+from src.core.launcher import get_installed_smapi_version, launch_game, validate_game_path
 
 
 @pytest.mark.parametrize("bad_path", ["", "   ", "nonexistent_dir"])
@@ -75,3 +76,15 @@ def test_launch_game_invokes_popen_and_handles_oserror(
     monkeypatch.setattr(subprocess, "Popen", failing_popen)
     ok, msg = launch_game(str(game), modded=True)
     assert not ok and "permission denied" in msg
+
+
+def test_get_installed_smapi_version_reads_deps_json(tmp_path: Path) -> None:
+    game = tmp_path / "Stardew Valley"
+    game.mkdir()
+    assert get_installed_smapi_version(game) is None
+
+    (game / "StardewModdingAPI.deps.json").write_text(
+        json.dumps({"targets": {".NETCoreApp,Version=v6.0": {"StardewModdingAPI/4.1.10": {}}}}),
+        encoding="utf-8",
+    )
+    assert get_installed_smapi_version(game) == "4.1.10"

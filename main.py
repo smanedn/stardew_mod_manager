@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import webbrowser
 from pathlib import Path
 
 IS_FROZEN = getattr(sys, "frozen", False)
@@ -57,17 +58,23 @@ import customtkinter as ctk
 from src import __version__
 from src.core.config import ConfigManager
 from src.core.dependencies import analyze_mod_dependencies, format_issue_summary
-from src.core.launcher import get_smapi_log_path, launch_game, validate_game_path
+from src.core.launcher import (
+    get_installed_smapi_version,
+    get_smapi_log_path,
+    launch_game,
+    validate_game_path,
+)
 from src.core.mod_installer import install_mod_zip
 from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
-from src.core.nexus_installer import install_from_nexus
+from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
     UpdateChecker,
     UpdateResult,
+    install_mod_update,
 )
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_details_dialog import ModDetailsDialog
@@ -171,6 +178,7 @@ class SVModManagerApp(ctk.CTk):
             on_install_nexus=self._open_nexus_dialog,
             on_check_updates=self._check_updates,
             on_show_details=self._show_mod_details,
+            on_update_mod=self._update_single_mod,
         )
         self.mod_list.grid(
             row=1,
@@ -497,6 +505,61 @@ class SVModManagerApp(ctk.CTk):
                 auto_clear_ms=5000,
             )
 
+    def _update_single_mod(self, result: UpdateResult) -> None:
+        active = self.config_manager.active_profile
+        modpack_dir = self._active_modpack_dir()
+        nexus_key = self.config_manager.nexus_api_key
+        gh_token = self.config_manager.github_token
+        self.mod_list.set_loading(
+            True, f"Updating {result.mod_name} to v{result.latest_version}..."
+        )
+        self.launch_bar.set_status(f"Downloading update for '{result.mod_name}'...", level="info")
+
+        def worker() -> None:
+            try:
+                installed = install_mod_update(
+                    result,
+                    modpack_dir,
+                    nexus_api_key=nexus_key,
+                    github_token=gh_token,
+                )
+                err: Exception | None = None
+            except Exception as exc:  # noqa: BLE001
+                installed = []
+                err = exc
+            self.after(0, lambda: self._on_single_update_done(active, result, installed, err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_single_update_done(
+        self,
+        profile_id: str,
+        result: UpdateResult,
+        installed: list[str],
+        err: Exception | None,
+    ) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_loading(False)
+        if err is None:
+            current = self.config_manager.get_enabled_mods(profile_id)
+            self.config_manager.set_enabled_mods(current + installed, profile_id)
+            self._refresh_mods()
+            self.launch_bar.set_status(
+                f"Updated '{result.mod_name}' to v{result.latest_version}!",
+                level="success",
+                auto_clear_ms=5000,
+            )
+            return
+
+        self._refresh_mods()
+        self.launch_bar.set_status(f"Update failed: {err}", level="error")
+        if (isinstance(err, NexusForbiddenError) or result.url) and messagebox.askyesno(
+            "Open Release Page?",
+            f"{err}\n\nOpen '{result.mod_name}' release page in your browser?",
+        ):
+            webbrowser.open(result.url)
+
     def _refresh_mods(self) -> None:
         self._scan_generation += 1
         generation = self._scan_generation
@@ -518,7 +581,8 @@ class SVModManagerApp(ctk.CTk):
         self.mod_list.set_loading(False)
         enabled = self.config_manager.get_enabled_mods(profile_id)
         self.mod_list.set_mods(mods, enabled, profile_id)
-        issues = analyze_mod_dependencies(mods, set(enabled))
+        smapi_ver = get_installed_smapi_version(self.config_manager.game_path)
+        issues = analyze_mod_dependencies(mods, set(enabled), smapi_version=smapi_ver)
         self.mod_list.set_issues(issues)
         self.launch_bar.set_status(
             f"Found {len(mods)} mod(s) in modpack '{profile_id}'.", level="info"
@@ -526,7 +590,10 @@ class SVModManagerApp(ctk.CTk):
 
     def _on_mods_toggled(self, enabled_mods: list[str]) -> None:
         self.config_manager.set_enabled_mods(enabled_mods)
-        issues = analyze_mod_dependencies(self._current_mods, set(enabled_mods))
+        smapi_ver = get_installed_smapi_version(self.config_manager.game_path)
+        issues = analyze_mod_dependencies(
+            self._current_mods, set(enabled_mods), smapi_version=smapi_ver
+        )
         self.mod_list.set_issues(issues)
 
     def _show_mod_details(self, mod: ModInfo) -> None:
@@ -564,7 +631,8 @@ class SVModManagerApp(ctk.CTk):
         self._on_game_path_changed(game_path)
         active = self.config_manager.active_profile
         enabled = self.config_manager.get_enabled_mods(active)
-        issues = analyze_mod_dependencies(self._current_mods, set(enabled))
+        smapi_ver = get_installed_smapi_version(game_path)
+        issues = analyze_mod_dependencies(self._current_mods, set(enabled), smapi_version=smapi_ver)
         if issues:
             summary = format_issue_summary(issues, self._current_mods)
             proceed = messagebox.askyesno(
