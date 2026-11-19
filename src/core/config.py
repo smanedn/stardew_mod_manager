@@ -27,6 +27,8 @@ class AppConfig(TypedDict):
     game_path: str
     active_profile: str
     appearance_mode: str
+    theme: str
+    custom_theme: dict[str, str]
     github_token: str
     nexus_api_key: str
     auto_backup_saves: bool
@@ -37,10 +39,22 @@ class AppConfig(TypedDict):
     profiles: dict[str, ProfileData]
 
 
+DEFAULT_CUSTOM_THEME: dict[str, str] = {
+    "mode": "dark",
+    "bg_app": "#11141A",
+    "bg_sidebar": "#161A22",
+    "surface": "#1B2029",
+    "accent": "#2563EB",
+    "success": "#16A34A",
+    "text_primary": "#F1F5F9",
+}
+
 DEFAULT_CONFIG: AppConfig = {
     "game_path": DEFAULT_GAME_PATH,
     "active_profile": "Default",
     "appearance_mode": "dark",
+    "theme": "Midnight",
+    "custom_theme": dict(DEFAULT_CUSTOM_THEME),
     "github_token": "",
     "nexus_api_key": "",
     "auto_backup_saves": False,
@@ -147,6 +161,24 @@ class ConfigManager:
         if isinstance(mode, str) and mode.lower() in ("dark", "light", "system"):
             normalized["appearance_mode"] = mode.lower()
 
+        raw_theme = raw.get("theme")
+        if isinstance(raw_theme, str) and raw_theme.strip():
+            normalized["theme"] = raw_theme.strip()
+        elif normalized["appearance_mode"] == "light":
+            normalized["theme"] = "Daylight"
+
+        raw_custom = raw.get("custom_theme")
+        if isinstance(raw_custom, dict):
+            clean_custom = dict(DEFAULT_CUSTOM_THEME)
+            c_mode = str(raw_custom.get("mode", "")).lower()
+            if c_mode in ("dark", "light"):
+                clean_custom["mode"] = c_mode
+            for key in ("bg_app", "bg_sidebar", "surface", "accent", "success", "text_primary"):
+                val = raw_custom.get(key)
+                if isinstance(val, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", val.strip()):
+                    clean_custom[key] = val.strip().upper()
+            normalized["custom_theme"] = clean_custom
+
         token = raw.get("github_token")
         if isinstance(token, str):
             normalized["github_token"] = token.strip()
@@ -227,6 +259,37 @@ class ConfigManager:
         if clean not in ("dark", "light", "system"):
             raise ValueError(f"Unsupported appearance mode: {mode}")
         self.data["appearance_mode"] = clean
+        self.save()
+
+    @property
+    def theme(self) -> str:
+        """Return the active UI theme name."""
+        return str(self.data.get("theme", "Midnight"))
+
+    @theme.setter
+    def theme(self, name: str) -> None:
+        self.data["theme"] = name.strip() or "Midnight"
+        self.save()
+
+    @property
+    def custom_theme(self) -> dict[str, str]:
+        """Return the user's custom theme color map."""
+        raw = self.data.get("custom_theme")
+        if isinstance(raw, dict):
+            return {str(k): str(v) for k, v in raw.items()}
+        return dict(DEFAULT_CUSTOM_THEME)
+
+    @custom_theme.setter
+    def custom_theme(self, palette: dict[str, str]) -> None:
+        clean = dict(DEFAULT_CUSTOM_THEME)
+        c_mode = str(palette.get("mode", "")).lower()
+        if c_mode in ("dark", "light"):
+            clean["mode"] = c_mode
+        for key in ("bg_app", "bg_sidebar", "surface", "accent", "success", "text_primary"):
+            val = palette.get(key, "")
+            if isinstance(val, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", val.strip()):
+                clean[key] = val.strip().upper()
+        self.data["custom_theme"] = clean
         self.save()
 
     @property

@@ -19,7 +19,7 @@ class TopBar(ctk.CTkFrame):
         initial_path: str,
         on_path_change: Callable[[str], None],
         on_browse: Callable[[], None],
-        on_open_modpack: Callable[[], None],
+        on_open_modpack: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -29,6 +29,7 @@ class TopBar(ctk.CTkFrame):
             border_color=COLORS["border"],
         )
         self._on_path_change = on_path_change
+        self._on_open_modpack = on_open_modpack
         self.grid_columnconfigure(1, weight=1)
 
         # --- Row 0: Active Modpack Title + Live Game Status Pill ---
@@ -36,7 +37,7 @@ class TopBar(ctk.CTkFrame):
         header_row.grid(
             row=0,
             column=0,
-            columnspan=4,
+            columnspan=3,
             sticky="ew",
             padx=SPACING["md"],
             pady=(SPACING["md"], 4),
@@ -44,7 +45,11 @@ class TopBar(ctk.CTkFrame):
         header_row.grid_columnconfigure(0, weight=1)
 
         self.title_label = ctk.CTkLabel(
-            header_row, text="Modpack: Default", font=font_header(), anchor="w"
+            header_row,
+            text="Modpack: Default",
+            font=font_header(),
+            text_color=COLORS["text_primary"],
+            anchor="w",
         )
         self.title_label.grid(row=0, column=0, sticky="w")
 
@@ -80,7 +85,7 @@ class TopBar(ctk.CTkFrame):
         )
         self.validation_label.grid(row=0, column=2, sticky="e")
 
-        # --- Row 1: Game Path Input + Subtle Actions ---
+        # --- Row 1: Game Path Input + Browse ---
         ctk.CTkLabel(
             self, text="Game Folder:", font=font_small(), text_color=COLORS["text_muted"]
         ).grid(row=1, column=0, padx=(SPACING["md"], SPACING["sm"]), pady=(2, SPACING["md"]))
@@ -92,6 +97,7 @@ class TopBar(ctk.CTkFrame):
             height=30,
             fg_color=COLORS["surface_alt"],
             border_color=COLORS["border"],
+            text_color=COLORS["text_primary"],
         )
         self.game_path_entry.grid(
             row=1, column=1, sticky="ew", padx=(0, SPACING["sm"]), pady=(2, SPACING["md"])
@@ -99,19 +105,17 @@ class TopBar(ctk.CTkFrame):
         self.game_path_entry.bind("<FocusOut>", lambda _e: self._emit_path())
         self.game_path_entry.bind("<Return>", lambda _e: self._emit_path())
 
-        btn_cfg = {
-            "height": 30,
-            "font": font_small(),
-            "fg_color": COLORS["neutral_btn"],
-            "hover_color": COLORS["neutral_btn_hover"],
-            "text_color": COLORS["neutral_btn_text"],
-        }
-        ctk.CTkButton(self, text="Browse...", width=82, command=on_browse, **btn_cfg).grid(
-            row=1, column=2, padx=(0, 6), pady=(2, SPACING["md"])
-        )
         ctk.CTkButton(
-            self, text="Open Modpack Folder", width=148, command=on_open_modpack, **btn_cfg
-        ).grid(row=1, column=3, padx=(0, SPACING["md"]), pady=(2, SPACING["md"]))
+            self,
+            text="Browse...",
+            width=84,
+            height=30,
+            font=font_small(),
+            fg_color=COLORS["neutral_btn"],
+            hover_color=COLORS["neutral_btn_hover"],
+            text_color=COLORS["neutral_btn_text"],
+            command=on_browse,
+        ).grid(row=1, column=2, padx=(0, SPACING["md"]), pady=(2, SPACING["md"]))
 
     def _emit_path(self) -> None:
         self._on_path_change(self.game_path_var.get().strip())

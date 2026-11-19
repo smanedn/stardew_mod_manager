@@ -1,7 +1,8 @@
-"""Revamped left navigation sidebar: brand header, modpacks, and utilities."""
+"""Clean left navigation sidebar: brand header, modpacks, and compact action menus."""
 
 from __future__ import annotations
 
+import tkinter as tk
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
@@ -13,14 +14,13 @@ from src.ui.theme import COLORS, SPACING, font_bold, font_header, font_small, fo
 
 
 class ProfileSidebar(ctk.CTkFrame):
-    """Full-height left sidebar for modpack management and app utilities."""
+    """Full-height left sidebar for modpack switching and compact tool menus."""
 
     def __init__(
         self,
         master: ctk.CTkBaseClass,
         version: str,
         logo_path: Path | None,
-        initial_theme: str,
         on_select: Callable[[str], None],
         on_create: Callable[[str], None],
         on_delete: Callable[[], None],
@@ -31,15 +31,16 @@ class ProfileSidebar(ctk.CTkFrame):
         on_open_saves: Callable[[], None],
         on_open_smapi_log: Callable[[], None],
         on_open_settings: Callable[[], None],
-        on_theme_change: Callable[[str], None],
+        on_open_themes: Callable[[], None],
         on_export_bundle: Callable[[], None] | None = None,
         on_import_bundle: Callable[[], None] | None = None,
         on_rename: Callable[[], None] | None = None,
         on_coop_check: Callable[[], None] | None = None,
+        on_open_modpack_folder: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
-            width=260,
+            width=252,
             fg_color=COLORS["bg_sidebar"],
             corner_radius=0,
             border_width=0,
@@ -50,7 +51,20 @@ class ProfileSidebar(ctk.CTkFrame):
 
         self._on_select = on_select
         self._on_create = on_create
-        self._on_theme_change = on_theme_change
+        self._on_delete = on_delete
+        self._on_import = on_import
+        self._on_export = on_export
+        self._on_duplicate = on_duplicate
+        self._on_share_modlist = on_share_modlist
+        self._on_export_bundle = on_export_bundle
+        self._on_import_bundle = on_import_bundle
+        self._on_rename = on_rename
+        self._on_open_modpack_folder = on_open_modpack_folder
+        self._on_open_saves = on_open_saves
+        self._on_open_smapi_log = on_open_smapi_log
+        self._on_coop_check = on_coop_check
+        self._can_delete = False
+
         self.profile_buttons: dict[str, ctk.CTkButton] = {}
         self._logo_img: ctk.CTkImage | None = None
 
@@ -71,9 +85,9 @@ class ProfileSidebar(ctk.CTkFrame):
             except OSError:
                 pass
 
-        ctk.CTkLabel(brand, text="SVMM", font=font_header(), anchor="w").grid(
-            row=0, column=1, sticky="w"
-        )
+        ctk.CTkLabel(
+            brand, text="SVMM", font=font_header(), text_color=COLORS["text_primary"], anchor="w"
+        ).grid(row=0, column=1, sticky="w")
         ctk.CTkLabel(
             brand,
             text=f"v{version}",
@@ -102,17 +116,18 @@ class ProfileSidebar(ctk.CTkFrame):
         self.profile_list_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=2)
         self.profile_list_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Create New Modpack ---
+        # --- Create / Manage Modpack Row ---
         add_frame = ctk.CTkFrame(self, fg_color="transparent")
-        add_frame.grid(row=3, column=0, sticky="ew", padx=SPACING["md"], pady=(6, 6))
+        add_frame.grid(row=3, column=0, sticky="ew", padx=SPACING["md"], pady=(8, 10))
         add_frame.grid_columnconfigure(0, weight=1)
 
         self.new_profile_entry = ctk.CTkEntry(
             add_frame,
             height=32,
-            placeholder_text="New modpack name...",
+            placeholder_text="New modpack...",
             fg_color=COLORS["surface"],
             border_color=COLORS["border"],
+            text_color=COLORS["text_primary"],
         )
         self.new_profile_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self.new_profile_entry.bind("<Return>", lambda _e: self._submit_create())
@@ -126,94 +141,32 @@ class ProfileSidebar(ctk.CTkFrame):
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             command=self._submit_create,
-        ).grid(row=0, column=1)
+        ).grid(row=0, column=1, padx=(0, 4))
 
-        # --- Compact Modpack Actions ---
-        actions = ctk.CTkFrame(self, fg_color="transparent")
-        actions.grid(row=4, column=0, sticky="ew", padx=SPACING["md"], pady=(0, 6))
-        actions.grid_columnconfigure(0, weight=1)
-        actions.grid_columnconfigure(1, weight=1)
+        self.manage_btn = ctk.CTkButton(
+            add_frame,
+            text="⋯",
+            width=34,
+            height=32,
+            font=font_title(),
+            fg_color=COLORS["neutral_btn"],
+            hover_color=COLORS["neutral_btn_hover"],
+            text_color=COLORS["neutral_btn_text"],
+            command=self._show_modpack_menu,
+        )
+        self.manage_btn.grid(row=0, column=2)
 
-        btn_cfg = {
-            "height": 28,
-            "font": font_small(),
-            "fg_color": COLORS["neutral_btn"],
-            "hover_color": COLORS["neutral_btn_hover"],
-            "text_color": COLORS["neutral_btn_text"],
-        }
-        ctk.CTkButton(actions, text="Import", command=on_import, **btn_cfg).grid(
-            row=0, column=0, sticky="ew", padx=(0, 3), pady=2
-        )
-        ctk.CTkButton(actions, text="Export", command=on_export, **btn_cfg).grid(
-            row=0, column=1, sticky="ew", padx=(3, 0), pady=2
-        )
-        ctk.CTkButton(actions, text="Duplicate", command=on_duplicate, **btn_cfg).grid(
-            row=1, column=0, sticky="ew", padx=(0, 3), pady=2
-        )
-        ctk.CTkButton(actions, text="Share List", command=on_share_modlist, **btn_cfg).grid(
-            row=1, column=1, sticky="ew", padx=(3, 0), pady=2
-        )
-        if on_import_bundle is not None and on_export_bundle is not None:
-            ctk.CTkButton(actions, text="Import .zip", command=on_import_bundle, **btn_cfg).grid(
-                row=2, column=0, sticky="ew", padx=(0, 3), pady=2
-            )
-            ctk.CTkButton(actions, text="Export .zip", command=on_export_bundle, **btn_cfg).grid(
-                row=2, column=1, sticky="ew", padx=(3, 0), pady=2
-            )
-        if on_coop_check is not None:
-            ctk.CTkButton(
-                actions, text="Co-op Parity Check", command=on_coop_check, **btn_cfg
-            ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 2))
-
-        manage_row = ctk.CTkFrame(self, fg_color="transparent")
-        manage_row.grid(row=5, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 10))
-        manage_row.grid_columnconfigure(0, weight=1)
-        manage_row.grid_columnconfigure(1, weight=1)
-
-        if on_rename is not None:
-            ctk.CTkButton(
-                manage_row,
-                text="Rename",
-                height=28,
-                font=font_small(),
-                fg_color=COLORS["neutral_btn"],
-                hover_color=COLORS["neutral_btn_hover"],
-                text_color=COLORS["neutral_btn_text"],
-                command=on_rename,
-            ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
-
-        self.delete_btn = ctk.CTkButton(
-            manage_row,
-            text="Delete",
-            height=28,
-            font=font_small(),
-            fg_color="transparent",
-            hover_color=COLORS["danger"],
-            border_width=1,
-            border_color=COLORS["border"],
-            text_color=COLORS["error_text"],
-            command=on_delete,
-        )
-        self.delete_btn.grid(
-            row=0,
-            column=1 if on_rename is not None else 0,
-            columnspan=1 if on_rename else 2,
-            sticky="ew",
-            padx=(3 if on_rename else 0, 0),
-        )
-
-        # --- Divider & Utilities ---
+        # --- Divider & Clean 3-Button Utility Dock ---
         ctk.CTkFrame(self, height=1, fg_color=COLORS["border"]).grid(
-            row=6, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 8)
+            row=4, column=0, sticky="ew", padx=SPACING["md"], pady=(0, 10)
         )
 
         utils = ctk.CTkFrame(self, fg_color="transparent")
-        utils.grid(row=7, column=0, sticky="ew", padx=SPACING["md"], pady=(0, SPACING["md"]))
-        utils.grid_columnconfigure(0, weight=1)
-        utils.grid_columnconfigure(1, weight=1)
+        utils.grid(row=5, column=0, sticky="ew", padx=SPACING["md"], pady=(0, SPACING["md"]))
+        utils.grid_columnconfigure((0, 1, 2), weight=1)
 
         util_cfg = {
-            "height": 30,
+            "height": 32,
             "font": font_small(),
             "fg_color": COLORS["surface"],
             "hover_color": COLORS["surface_hover"],
@@ -221,33 +174,78 @@ class ProfileSidebar(ctk.CTkFrame):
             "border_width": 1,
             "border_color": COLORS["border"],
         }
-        if on_open_saves is not None:
-            ctk.CTkButton(utils, text="Save Backups", command=on_open_saves, **util_cfg).grid(
-                row=0, column=0, sticky="ew", padx=(0, 3), pady=3
-            )
-        ctk.CTkButton(utils, text="SMAPI Log", command=on_open_smapi_log, **util_cfg).grid(
-            row=0, column=1, sticky="ew", padx=(3, 0), pady=3
+
+        self.tools_btn = ctk.CTkButton(
+            utils, text="Tools ▾", command=self._show_tools_menu, **util_cfg
         )
-        ctk.CTkButton(utils, text="⚙ Settings", command=on_open_settings, **util_cfg).grid(
-            row=1, column=0, sticky="ew", padx=(0, 3), pady=3
+        self.tools_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        ctk.CTkButton(utils, text="Themes", command=on_open_themes, **util_cfg).grid(
+            row=0, column=1, sticky="ew", padx=2
         )
 
-        self.theme_menu = ctk.CTkOptionMenu(
-            utils,
-            values=["Dark", "Light", "System"],
-            height=30,
-            font=font_small(),
-            fg_color=COLORS["surface"],
-            button_color=COLORS["neutral_btn"],
-            button_hover_color=COLORS["neutral_btn_hover"],
-            text_color=COLORS["text_primary"],
-            command=self._handle_theme,
+        ctk.CTkButton(utils, text="Settings", command=on_open_settings, **util_cfg).grid(
+            row=0, column=2, sticky="ew", padx=(4, 0)
         )
-        self.theme_menu.set(initial_theme.capitalize())
-        self.theme_menu.grid(row=1, column=1, sticky="ew", padx=(3, 0), pady=3)
 
-    def _handle_theme(self, choice: str) -> None:
-        self._on_theme_change(choice.lower())
+    def _themed_menu(self) -> tk.Menu:
+        bg = COLORS["surface"][1] if ctk.get_appearance_mode() == "Dark" else COLORS["surface"][0]
+        fg = (
+            COLORS["text_primary"][1]
+            if ctk.get_appearance_mode() == "Dark"
+            else COLORS["text_primary"][0]
+        )
+        active_bg = COLORS["accent"][0]
+        return tk.Menu(
+            self,
+            tearoff=0,
+            bg=bg,
+            fg=fg,
+            activebackground=active_bg,
+            activeforeground="#FFFFFF",
+            relief="flat",
+            bd=1,
+        )
+
+    def _show_modpack_menu(self) -> None:
+        menu = self._themed_menu()
+        if self._on_rename is not None:
+            menu.add_command(label="Rename Modpack", command=self._on_rename)
+        menu.add_command(label="Duplicate Modpack", command=self._on_duplicate)
+        menu.add_command(
+            label="Delete Modpack",
+            command=self._on_delete,
+            state="normal" if self._can_delete else "disabled",
+        )
+        menu.add_separator()
+        menu.add_command(label="Import Modlist (.json)", command=self._on_import)
+        menu.add_command(label="Export Modlist (.json)", command=self._on_export)
+        menu.add_command(label="Share Modlist (Copy / File)", command=self._on_share_modlist)
+        if self._on_import_bundle is not None and self._on_export_bundle is not None:
+            menu.add_separator()
+            menu.add_command(label="Import Modpack Bundle (.zip)", command=self._on_import_bundle)
+            menu.add_command(label="Export Modpack Bundle (.zip)", command=self._on_export_bundle)
+        if self._on_open_modpack_folder is not None:
+            menu.add_separator()
+            menu.add_command(label="Open Modpack Folder", command=self._on_open_modpack_folder)
+
+        x = self.manage_btn.winfo_rootx()
+        y = self.manage_btn.winfo_rooty() - 10
+        menu.tk_popup(x, y)
+
+    def _show_tools_menu(self) -> None:
+        menu = self._themed_menu()
+        menu.add_command(label="Save Backups & Farm Bindings", command=self._on_open_saves)
+        menu.add_command(label="SMAPI Log Analyzer", command=self._on_open_smapi_log)
+        if self._on_coop_check is not None:
+            menu.add_command(label="Co-op Parity Check", command=self._on_coop_check)
+        if self._on_open_modpack_folder is not None:
+            menu.add_separator()
+            menu.add_command(label="Open Modpack Folder", command=self._on_open_modpack_folder)
+
+        x = self.tools_btn.winfo_rootx()
+        y = self.tools_btn.winfo_rooty() - 10
+        menu.tk_popup(x, y)
 
     def _submit_create(self) -> None:
         name = self.new_profile_entry.get().strip()
@@ -280,5 +278,4 @@ class ProfileSidebar(ctk.CTkFrame):
             btn.grid(row=row_idx, column=0, sticky="ew", pady=2)
             self.profile_buttons[pid] = btn
 
-        can_delete = len(profiles) > 1
-        self.delete_btn.configure(state="normal" if can_delete else "disabled")
+        self._can_delete = len(profiles) > 1

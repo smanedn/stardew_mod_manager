@@ -93,6 +93,7 @@ from src.core.launcher import (
     launch_game,
     validate_game_path,
 )
+from src.core.mod_icons import extract_nexus_mod_id, fetch_nexus_mod_thumbnail, load_mod_icon
 from src.core.mod_installer import install_mod_archive, parse_dropped_archive_paths
 from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
@@ -121,7 +122,7 @@ from src.ui.profile_sidebar import ProfileSidebar
 from src.ui.save_backup_dialog import SaveBackupDialog
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.smapi_log_dialog import SmapiLogDialog
-from src.ui.theme import COLORS, SPACING
+from src.ui.theme import COLORS, SPACING, apply_theme
 from src.ui.top_bar import TopBar
 
 MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
@@ -129,6 +130,7 @@ PROFILES_DIR = PROJECT_ROOT / "SVMM_Data" / "profiles"
 CONFIG_FILE = PROJECT_ROOT / "SVMM_Data" / "config.json"
 UPDATE_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "update_cache.json"
 SMAPI_COMPAT_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "smapi_compat_cache.json"
+MOD_ICONS_DIR = PROJECT_ROOT / "SVMM_Data" / "mod_icons"
 SAVE_BACKUPS_DIR = PROJECT_ROOT / "SVMM_Data" / "save_backups"
 LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
 ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
@@ -167,7 +169,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         PROFILES_DIR.mkdir(parents=True, exist_ok=True)
 
         self.config_manager = ConfigManager(CONFIG_FILE)
-        ctk.set_appearance_mode(self.config_manager.appearance_mode)
+        apply_theme(self.config_manager.theme, self.config_manager.custom_theme)
+        self.configure(fg_color=COLORS["bg_app"])
         self._ensure_modpack_folders()
 
         self._scan_generation = 0
@@ -189,7 +192,6 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             self,
             version=__version__,
             logo_path=LOGO_FILE,
-            initial_theme=self.config_manager.appearance_mode,
             on_select=self._select_profile,
             on_create=self._create_profile,
             on_delete=self._delete_active_profile,
@@ -201,10 +203,11 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_import_bundle=self._import_bundle,
             on_open_saves=self._open_save_backups,
             on_open_smapi_log=self._open_smapi_log,
-            on_open_settings=self._open_settings,
-            on_theme_change=self._on_theme_changed,
+            on_open_settings=lambda: self._open_settings("General"),
+            on_open_themes=lambda: self._open_settings("Themes"),
             on_rename=self._rename_active_profile,
             on_coop_check=self._coop_parity_check,
+            on_open_modpack_folder=self._open_modpack_folder,
         )
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -213,7 +216,6 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             initial_path=self.config_manager.game_path,
             on_path_change=self._on_game_path_changed,
             on_browse=self._browse_game_path,
-            on_open_modpack=self._open_modpack_folder,
         )
         self.top_bar.grid(
             row=0,
@@ -235,6 +237,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_update_all=self._update_all_mods,
             on_fix_deps=self._fix_missing_dependencies,
             on_check_compat=self._check_smapi_compat,
+            icon_cache_dir=MOD_ICONS_DIR,
         )
         self.mod_list.grid(
             row=1,
@@ -412,7 +415,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         labels = [farms.get(folder, folder) for folder in sorted(bound_folders)]
         self.top_bar.set_bound_farms(labels)
 
-    def _open_settings(self) -> None:
+    def _open_settings(self, initial_tab: str = "General") -> None:
         SettingsDialog(
             self,
             github_token=self.config_manager.github_token,
@@ -421,11 +424,17 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             max_auto_backups=self.config_manager.max_auto_backups,
             launch_via_steam=self.config_manager.launch_via_steam,
             launch_args=self.config_manager.launch_args,
+            current_theme=self.config_manager.theme,
+            custom_theme=self.config_manager.custom_theme,
             update_cache_path=UPDATE_CACHE_FILE,
+            compat_cache_path=SMAPI_COMPAT_CACHE_FILE,
+            icon_cache_dir=MOD_ICONS_DIR,
             on_save=self._save_settings,
+            on_apply_theme=self._apply_and_refresh_theme,
             on_cache_cleared=lambda: self.launch_bar.set_status(
                 "Cleared update cache.", level="info", auto_clear_ms=3000
             ),
+            initial_tab=initial_tab,
         )
 
     def _save_settings(
@@ -443,9 +452,30 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self.config_manager.launch_args = launch_args
         self.launch_bar.set_status("Saved settings.", level="success", auto_clear_ms=3000)
 
-    def _on_theme_changed(self, mode: str) -> None:
-        self.config_manager.appearance_mode = mode
-        ctk.set_appearance_mode(mode)
+    def _apply_and_refresh_theme(self, theme_name: str, custom_theme: dict[str, str]) -> None:
+        resolved = apply_theme(theme_name, custom_theme)
+        self.config_manager.theme = resolved
+        self.config_manager.custom_theme = custom_theme
+        self.configure(fg_color=COLORS["bg_app"])
+
+        # Rebuild main window layout so every widget reflects the new theme palette live
+        for attr in ("sidebar", "top_bar", "mod_list", "launch_bar"):
+            widget = getattr(self, attr, None)
+            if widget is not None and widget.winfo_exists():
+                widget.destroy()
+
+        self._build_layout()
+        self._validate_game_path(self.config_manager.game_path)
+        self._refresh_profiles()
+        active = self.config_manager.active_profile
+        enabled = self.config_manager.get_enabled_mods(active)
+        self.mod_list.set_mods(self._current_mods, enabled, active)
+        self._refresh_dependency_warnings(set(enabled))
+        if self._last_update_results:
+            self.mod_list.set_updates(self._last_update_results)
+        self.launch_bar.set_status(
+            f"Theme applied: {resolved}", level="success", auto_clear_ms=3000
+        )
 
     def _refresh_profiles(self) -> None:
         active = self.config_manager.active_profile
@@ -1133,6 +1163,34 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self.launch_bar.set_status(
             f"Found {len(mods)} mod(s) in modpack '{profile_id}'.", level="info"
         )
+        self._prefetch_mod_icons_async(generation, mods)
+
+    def _prefetch_mod_icons_async(self, generation: int, mods: list[ModInfo]) -> None:
+        api_key = self.config_manager.nexus_api_key.strip()
+        if not api_key or not mods:
+            return
+
+        def worker() -> None:
+            for mod in mods:
+                if generation != self._scan_generation:
+                    return
+                nexus_id = extract_nexus_mod_id(mod)
+                if not nexus_id:
+                    continue
+                target = MOD_ICONS_DIR / f"nexus_{nexus_id}.png"
+                if target.is_file():
+                    continue
+                fetched = fetch_nexus_mod_thumbnail(nexus_id, api_key, MOD_ICONS_DIR)
+                if fetched is not None:
+                    img = load_mod_icon(mod, MOD_ICONS_DIR, size=84)
+                    self.after(
+                        0,
+                        lambda f=mod.folder_name, im=img: (
+                            self.mod_list.update_mod_icon(f, im) if self.winfo_exists() else None
+                        ),
+                    )
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _on_mods_toggled(self, enabled_mods: list[str]) -> None:
         self.config_manager.set_enabled_mods(enabled_mods)
