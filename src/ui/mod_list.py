@@ -37,12 +37,15 @@ class ModListPanel(ctk.CTkFrame):
             border_color=COLORS["border"],
         )
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
 
         self._on_toggle = on_toggle
         self._on_show_details = on_show_details
         self._on_update_mod = on_update_mod
         self._mods: list[ModInfo] = []
+        self._status_filter = "all"
+        self._issue_folders: set[str] = set()
+        self._update_folders: set[str] = set()
         # folder -> (card_frame, switch, var, warning_label, warning_tip, update_btn, update_tip)
         self._mod_rows: dict[
             str,
@@ -172,10 +175,30 @@ class ModListPanel(ctk.CTkFrame):
             anchor="e",
         ).grid(row=0, column=5, sticky="e")
 
-        # --- Row 2: Scrollable Mod Cards ---
+        # --- Row 2: Quick Filter Chips ---
+        chip_bar = ctk.CTkFrame(self, fg_color="transparent")
+        chip_bar.grid(row=2, column=0, sticky="ew", padx=SPACING["md"], pady=(0, 6))
+
+        self.filter_chips = ctk.CTkSegmentedButton(
+            chip_bar,
+            values=["All", "Enabled", "Disabled", "Issues ⚠", "Updates ↑"],
+            height=28,
+            font=font_small(),
+            fg_color=COLORS["surface_alt"],
+            selected_color=COLORS["accent"],
+            selected_hover_color=COLORS["accent_hover"],
+            unselected_color=COLORS["surface_alt"],
+            unselected_hover_color=COLORS["surface_hover"],
+            text_color=COLORS["text_primary"],
+            command=self._on_filter_chip_changed,
+        )
+        self.filter_chips.set("All")
+        self.filter_chips.grid(row=0, column=0, sticky="w")
+
+        # --- Row 3: Scrollable Mod Cards ---
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color=COLORS["bg_app"], corner_radius=8)
         self.scroll_frame.grid(
-            row=2, column=0, sticky="nsew", padx=SPACING["md"], pady=(0, SPACING["md"])
+            row=3, column=0, sticky="nsew", padx=SPACING["md"], pady=(0, SPACING["md"])
         )
         self.scroll_frame.grid_columnconfigure(0, weight=1)
 
@@ -345,6 +368,7 @@ class ModListPanel(ctk.CTkFrame):
         self._update_count()
 
     def set_issues(self, issues: dict[str, list[ModIssue]]) -> None:
+        self._issue_folders = set(issues.keys())
         for folder, (_, _, _, warn_lbl, warn_tip, _, _) in self._mod_rows.items():
             mod_issues = issues.get(folder)
             if mod_issues:
@@ -354,9 +378,12 @@ class ModListPanel(ctk.CTkFrame):
             else:
                 warn_lbl.grid_remove()
                 warn_tip.update_text("")
+        if self._status_filter == "issues":
+            self._apply_filter()
 
     def set_updates(self, results: list[UpdateResult]) -> None:
         by_folder = {r.folder_name: r for r in results}
+        self._update_folders = {r.folder_name for r in results if r.has_update}
         for folder, (_, _, _, _, _, upd_btn, upd_tip) in self._mod_rows.items():
             res = by_folder.get(folder)
             if res and res.has_update:
@@ -370,6 +397,19 @@ class ModListPanel(ctk.CTkFrame):
             else:
                 upd_btn.grid_remove()
                 upd_tip.update_text("")
+        if self._status_filter == "updates":
+            self._apply_filter()
+
+    def _on_filter_chip_changed(self, label: str) -> None:
+        mapping = {
+            "All": "all",
+            "Enabled": "enabled",
+            "Disabled": "disabled",
+            "Issues ⚠": "issues",
+            "Updates ↑": "updates",
+        }
+        self._status_filter = mapping.get(label, "all")
+        self._apply_filter()
 
     def _trigger_update(self, result: UpdateResult) -> None:
         if self._on_update_mod is not None:
@@ -381,6 +421,19 @@ class ModListPanel(ctk.CTkFrame):
         self._search_after_id = self.after(150, self._apply_filter)
 
     def _matches_query(self, mod: ModInfo, query: str) -> bool:
+        if self._status_filter == "enabled":
+            if not self._mod_rows[mod.folder_name][2].get():
+                return False
+        elif self._status_filter == "disabled":
+            if self._mod_rows[mod.folder_name][2].get():
+                return False
+        elif self._status_filter == "issues":
+            if mod.folder_name not in self._issue_folders and not mod.error:
+                return False
+        elif self._status_filter == "updates":
+            if mod.folder_name not in self._update_folders:
+                return False
+
         if not query:
             return True
         return (
@@ -427,6 +480,8 @@ class ModListPanel(ctk.CTkFrame):
         self._update_count()
         enabled = [folder for folder, (_, _, var, *_) in self._mod_rows.items() if var.get()]
         self._on_toggle(enabled)
+        if self._status_filter in ("enabled", "disabled"):
+            self._apply_filter()
 
     def select_all(self) -> None:
         query = self.search_var.get().strip().lower()
