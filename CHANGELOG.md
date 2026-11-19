@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-11-19
+
+### Added
+- **Co-op Modlist Parity Checker** (`src/core/coop_parity.py`, `src/ui/coop_parity_dialog.py`): Compare a friend's exported `.json` modlist to spot missing mods, extra mods, and version mismatches with 1-click toggle sync.
+- **Content Patcher Asset Conflict Detector & Resolver** (`src/core/asset_conflicts.py`, `src/ui/asset_conflict_dialog.py`): Scans `content.json` `Target` fields across enabled packs and lets you disable colliding mods or inspect configs.
+- **Save-to-Modpack Binding** (`src/core/save_binding.py`, `src/ui/save_backup_dialog.py`): Bind actual Stardew Valley farm saves from `%APPDATA%\StardewValley\Saves` to specific modpacks.
+- **Live SMAPI Compatibility Status** (`src/core/smapi_compat.py`): Queries `smapi.io/api/v3.0/mods` to flag `Broken`, `Obsolete`, `Abandoned`, and `Unofficial` 1.6 updates.
+- **Mod Thumbnails & Batched Icon Loading** (`src/core/mod_icons.py`, `src/ui/mod_list.py`): Displays 42×42 local/cached Nexus thumbnails or monogram badges on every mod card with non-blocking batched loading.
+- **10 Built-in Themes & Custom Theme Studio** (`src/ui/theme.py`, `src/ui/settings_dialog.py`): Live theme switching across Midnight, Daylight, Pelican Town, Junimo Forest, Stardrop, Ginger Island, Skull Cavern, Nordic Frost, Rose Quartz, Honeywood, and Custom themes.
+- **1-Click SMAPI Installer & Auto-Updater** (`src/core/smapi_installer.py`, `src/ui/top_bar.py`): Download and launch the official SMAPI installer directly from SVMM.
+- **Desktop Modpack Shortcuts & Config Snapshots** (`src/core/shortcuts.py`, `src/core/config_presets.py`): Create Desktop shortcuts (`--launch-profile`) and snapshot/restore per-modpack `config.json` presets.
+- **Mod Trash Bin, Multi-Select Bulk Actions, Quick Setup Wizard & SVMM Update Checker** (`src/core/mod_manager.py`, `src/ui/trash_dialog.py`, `src/ui/onboarding_dialog.py`, `src/core/app_updater.py`).
+
+### Changed
+- **Revamped Clean UI**: Streamlined the sidebar with compact `⋯` and `Tools ▾` menus, simplified the mod toolbar to 2 rows, and redesigned Settings into a tabbed dialog.
+
 ## [0.8.0] - 2026-11-19
 
 ### Added
