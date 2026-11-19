@@ -116,9 +116,9 @@ class ModListPanel(ctk.CTkFrame):
 
         self.install_btn = ctk.CTkButton(
             action_bar,
-            text="+ Install .zip / .7z",
+            text="+ Install Archive",
             height=30,
-            width=136,
+            width=126,
             font=font_small(),
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
@@ -169,7 +169,7 @@ class ModListPanel(ctk.CTkFrame):
 
         ctk.CTkLabel(
             action_bar,
-            text="Tip: Drag & drop .zip / .7z files below",
+            text="Tip: Drag & drop .zip / .7z / .rar files below",
             font=font_small(),
             text_color=COLORS["text_muted"],
             anchor="e",

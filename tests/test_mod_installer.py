@@ -88,7 +88,7 @@ def test_install_7z_archive_extracts_mod_and_blocks_traversal(tmp_path: Path) ->
     # Corrupt / unsupported file fails cleanly
     bad_file = tmp_path / "not_an_archive.rar"
     bad_file.write_text("not a zip or 7z", encoding="utf-8")
-    with pytest.raises(ValueError, match="Unsupported or corrupted archive"):
+    with pytest.raises(ValueError, match="Invalid or corrupted .rar archive"):
         install_mod_archive(bad_file, modpack)
 
 
@@ -97,11 +97,13 @@ def test_parse_dropped_archive_paths_handles_braces_and_filters_extensions(
 ) -> None:
     zip_spaces = tmp_path / "mod with spaces.zip"
     mod_7z = tmp_path / "pack.7z"
+    mod_rar = tmp_path / "legacy.rar"
     ignored_txt = tmp_path / "notes.txt"
     zip_spaces.write_text("", encoding="utf-8")
     mod_7z.write_text("", encoding="utf-8")
+    mod_rar.write_text("", encoding="utf-8")
     ignored_txt.write_text("", encoding="utf-8")
 
-    raw = f"{{{zip_spaces}}} {mod_7z} {ignored_txt} {tmp_path / 'missing.zip'}"
+    raw = f"{{{zip_spaces}}} {mod_7z} {mod_rar} {ignored_txt} {tmp_path / 'missing.zip'}"
     parsed = parse_dropped_archive_paths(raw)
-    assert parsed == [zip_spaces, mod_7z]
+    assert parsed == [zip_spaces, mod_7z, mod_rar]

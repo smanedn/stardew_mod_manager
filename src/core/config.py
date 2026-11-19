@@ -31,6 +31,8 @@ class AppConfig(TypedDict):
     nexus_api_key: str
     auto_backup_saves: bool
     max_auto_backups: int
+    launch_via_steam: bool
+    launch_args: str
     profiles: dict[str, ProfileData]
 
 
@@ -42,6 +44,8 @@ DEFAULT_CONFIG: AppConfig = {
     "nexus_api_key": "",
     "auto_backup_saves": False,
     "max_auto_backups": 5,
+    "launch_via_steam": False,
+    "launch_args": "",
     "profiles": {
         "Default": {
             "name": "Default",
@@ -157,6 +161,14 @@ class ConfigManager:
         if isinstance(max_backups, int) and max_backups >= 1:
             normalized["max_auto_backups"] = max_backups
 
+        via_steam = raw.get("launch_via_steam")
+        if isinstance(via_steam, bool):
+            normalized["launch_via_steam"] = via_steam
+
+        l_args = raw.get("launch_args")
+        if isinstance(l_args, str):
+            normalized["launch_args"] = l_args.strip()
+
         raw_profiles = raw.get("profiles")
         if isinstance(raw_profiles, dict) and raw_profiles:
             profiles: dict[str, ProfileData] = {}
@@ -240,6 +252,26 @@ class ConfigManager:
         """Return maximum number of automatic save backups to retain."""
         val = self.data.get("max_auto_backups", 5)
         return val if isinstance(val, int) and val >= 1 else 5
+
+    @property
+    def launch_via_steam(self) -> bool:
+        """Return whether to launch via Steam URI (steam://rungameid/413150)."""
+        return bool(self.data.get("launch_via_steam", False))
+
+    @launch_via_steam.setter
+    def launch_via_steam(self, enabled: bool) -> None:
+        self.data["launch_via_steam"] = bool(enabled)
+        self.save()
+
+    @property
+    def launch_args(self) -> str:
+        """Return optional custom CLI arguments passed to the game executable."""
+        return str(self.data.get("launch_args", ""))
+
+    @launch_args.setter
+    def launch_args(self, args: str) -> None:
+        self.data["launch_args"] = args.strip()
+        self.save()
 
     @property
     def active_profile(self) -> str:

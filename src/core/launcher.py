@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+STEAM_APP_ID = "413150"
 
 
 def _executable_names() -> tuple[str, str]:
@@ -69,7 +72,12 @@ def get_installed_smapi_version(game_path: str | Path) -> str | None:
     return None
 
 
-def launch_game(game_path: str, modded: bool) -> tuple[bool, str]:
+def launch_game(
+    game_path: str,
+    modded: bool,
+    launch_args: str = "",
+    launch_via_steam: bool = False,
+) -> tuple[bool, str]:
     """Launch Stardew Valley via SMAPI (modded=True) or base game (modded=False)."""
     game_dir = Path(game_path)
     if not game_dir.is_dir():
@@ -83,8 +91,22 @@ def launch_game(game_path: str, modded: bool) -> tuple[bool, str]:
     if not exe_path.is_file():
         return False, f"Could not find {exe_name} in {game_dir}"
 
+    if launch_via_steam:
+        steam_uri = f"steam://rungameid/{STEAM_APP_ID}"
+        try:
+            if sys.platform == "win32":
+                os.startfile(steam_uri)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", steam_uri])
+            else:
+                subprocess.Popen(["xdg-open", steam_uri])
+        except OSError as exc:
+            return False, f"Failed to launch via Steam: {exc}"
+        return True, f"Launched {label} via Steam."
+
+    extra_args = shlex.split(launch_args) if launch_args.strip() else []
     try:
-        subprocess.Popen([str(exe_path)], cwd=str(game_dir))
+        subprocess.Popen([str(exe_path), *extra_args], cwd=str(game_dir))
     except OSError as exc:
         return False, f"Failed to launch {label}: {exc}"
 

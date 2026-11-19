@@ -385,6 +385,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             nexus_api_key=self.config_manager.nexus_api_key,
             auto_backup_saves=self.config_manager.auto_backup_saves,
             max_auto_backups=self.config_manager.max_auto_backups,
+            launch_via_steam=self.config_manager.launch_via_steam,
+            launch_args=self.config_manager.launch_args,
             update_cache_path=UPDATE_CACHE_FILE,
             on_save=self._save_settings,
             on_cache_cleared=lambda: self.launch_bar.set_status(
@@ -393,11 +395,18 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         )
 
     def _save_settings(
-        self, github_token: str, nexus_api_key: str, auto_backup_saves: bool
+        self,
+        github_token: str,
+        nexus_api_key: str,
+        auto_backup_saves: bool,
+        launch_via_steam: bool,
+        launch_args: str,
     ) -> None:
         self.config_manager.github_token = github_token
         self.config_manager.nexus_api_key = nexus_api_key
         self.config_manager.auto_backup_saves = auto_backup_saves
+        self.config_manager.launch_via_steam = launch_via_steam
+        self.config_manager.launch_args = launch_args
         self.launch_bar.set_status("Saved settings.", level="success", auto_clear_ms=3000)
 
     def _on_theme_changed(self, mode: str) -> None:
@@ -618,11 +627,12 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
 
     def _install_zip(self) -> None:
         archive_path = filedialog.askopenfilename(
-            title="Select Mod Archive (.zip or .7z)",
+            title="Select Mod Archive (.zip, .7z, or .rar)",
             filetypes=[
-                ("Mod archives", "*.zip *.7z"),
+                ("Mod archives", "*.zip *.7z *.rar"),
                 ("Zip archives", "*.zip"),
                 ("7z archives", "*.7z"),
+                ("RAR archives", "*.rar"),
             ],
         )
         if not archive_path:
@@ -1051,6 +1061,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         modpack_dir = self._active_modpack_dir()
         auto_backup = self.config_manager.auto_backup_saves
         max_auto = self.config_manager.max_auto_backups
+        launch_args = self.config_manager.launch_args
+        via_steam = self.config_manager.launch_via_steam
 
         self.launch_bar.set_busy(True)
         self.launch_bar.set_status(f"Syncing '{active}' and launching SMAPI...", level="info")
@@ -1065,7 +1077,12 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
                 profile_dir = sync_profile(active, enabled, modpack_dir, PROFILES_DIR)
                 ok, msg = link_game_mods(game_path, profile_dir)
                 if ok:
-                    ok, msg = launch_game(game_path, modded=True)
+                    ok, msg = launch_game(
+                        game_path,
+                        modded=True,
+                        launch_args=launch_args,
+                        launch_via_steam=via_steam,
+                    )
             except OSError as exc:
                 ok, msg = False, f"Sync failed: {exc}"
             self.after(0, lambda: self._on_launch_complete(ok, msg))
@@ -1075,6 +1092,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
     def _launch_vanilla(self) -> None:
         game_path = self.top_bar.get_path()
         self._on_game_path_changed(game_path)
+        launch_args = self.config_manager.launch_args
+        via_steam = self.config_manager.launch_via_steam
 
         self.launch_bar.set_busy(True)
         self.launch_bar.set_status("Unlinking Mods and launching Vanilla...", level="info")
@@ -1082,7 +1101,12 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         def worker() -> None:
             ok, msg = unlink_game_mods(game_path)
             if ok:
-                ok, msg = launch_game(game_path, modded=False)
+                ok, msg = launch_game(
+                    game_path,
+                    modded=False,
+                    launch_args=launch_args,
+                    launch_via_steam=via_steam,
+                )
             self.after(0, lambda: self._on_launch_complete(ok, msg))
 
         threading.Thread(target=worker, daemon=True).start()

@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 
 import py7zr
+import rarfile
 
 
 def _validate_archive_member(member_name: str, stage_root: Path) -> Path:
@@ -65,8 +66,22 @@ def _extract_7z(archive_path: Path, stage_root: Path) -> None:
         szf.extractall(path=stage_root)
 
 
+def _extract_rar(archive_path: Path, stage_root: Path) -> None:
+    try:
+        with rarfile.RarFile(archive_path, "r") as rf:
+            for info in rf.infolist():
+                _validate_archive_member(info.filename, stage_root)
+            rf.extractall(path=stage_root)
+    except rarfile.RarCannotExec as exc:
+        raise ValueError(
+            "Cannot extract .rar archive: install UnRAR, 7-Zip, or bsdtar on your PATH."
+        ) from exc
+    except rarfile.Error as exc:
+        raise ValueError(f"Invalid or corrupted .rar archive: {exc}") from exc
+
+
 def install_mod_archive(archive_path: str | Path, modpack_dir: str | Path) -> list[str]:
-    """Safely extract a .zip or .7z mod archive into modpack_dir and return folder names."""
+    """Safely extract a .zip, .7z, or .rar mod archive into modpack_dir."""
     src_path = Path(archive_path)
     if not src_path.is_file():
         raise FileNotFoundError(f"Archive not found: {src_path}")
@@ -78,7 +93,9 @@ def install_mod_archive(archive_path: str | Path, modpack_dir: str | Path) -> li
         stage_root = Path(tmp_dir)
         suffix = src_path.suffix.lower()
 
-        if suffix == ".7z" or (suffix != ".zip" and py7zr.is_7zfile(src_path)):
+        if suffix == ".rar" or (suffix not in (".zip", ".7z") and rarfile.is_rarfile(src_path)):
+            _extract_rar(src_path, stage_root)
+        elif suffix == ".7z" or (suffix != ".zip" and py7zr.is_7zfile(src_path)):
             _extract_7z(src_path, stage_root)
         elif zipfile.is_zipfile(src_path):
             _extract_zip(src_path, stage_root)
@@ -140,6 +157,6 @@ def parse_dropped_archive_paths(raw_drop_data: str) -> list[Path]:
     archives: list[Path] = []
     for tok in tokens:
         path = Path(tok)
-        if path.is_file() and path.suffix.lower() in (".zip", ".7z"):
+        if path.is_file() and path.suffix.lower() in (".zip", ".7z", ".rar"):
             archives.append(path)
     return archives

@@ -1,4 +1,4 @@
-"""In-app settings dialog for API keys and update cache management."""
+"""In-app settings dialog for API keys, launch options, and update cache management."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.ui.theme import COLORS, SPACING, font_bold, font_small
 
 
 class SettingsDialog(ctk.CTkToplevel):
-    """Modal dialog for configuring optional API keys and clearing caches."""
+    """Modal dialog for configuring optional API keys, launch options, and cache."""
 
     def __init__(
         self,
@@ -20,13 +20,15 @@ class SettingsDialog(ctk.CTkToplevel):
         nexus_api_key: str,
         auto_backup_saves: bool,
         max_auto_backups: int,
+        launch_via_steam: bool,
+        launch_args: str,
         update_cache_path: Path,
-        on_save: Callable[[str, str, bool], None],
+        on_save: Callable[[str, str, bool, bool, str], None],
         on_cache_cleared: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master)
         self.title("Settings")
-        self.geometry("520x340")
+        self.geometry("540x460")
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()
@@ -61,24 +63,43 @@ class SettingsDialog(ctk.CTkToplevel):
             self, textvariable=self.nexus_var, show="*", placeholder_text="Paste Nexus API key..."
         ).grid(row=3, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 10))
 
+        ctk.CTkLabel(
+            self,
+            text="Custom Launch Arguments (when not launching via Steam):",
+            font=font_bold(),
+            anchor="w",
+        ).grid(row=4, column=0, sticky="ew", padx=SPACING["lg"], pady=(4, 4))
+
+        self.args_var = ctk.StringVar(value=launch_args)
+        ctk.CTkEntry(self, textvariable=self.args_var, placeholder_text="e.g. --skip-intro").grid(
+            row=5, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 10)
+        )
+
+        self.steam_var = ctk.BooleanVar(value=launch_via_steam)
+        ctk.CTkCheckBox(
+            self,
+            text="Launch via Steam (steam://rungameid/413150 for Steam Overlay)",
+            variable=self.steam_var,
+        ).grid(row=6, column=0, sticky="w", padx=SPACING["lg"], pady=(0, 8))
+
         self.auto_backup_var = ctk.BooleanVar(value=auto_backup_saves)
         ctk.CTkCheckBox(
             self,
             text=f"Auto-backup saves before modded launch (keeps last {max_auto_backups})",
             variable=self.auto_backup_var,
-        ).grid(row=4, column=0, sticky="w", padx=SPACING["lg"], pady=(0, 8))
+        ).grid(row=7, column=0, sticky="w", padx=SPACING["lg"], pady=(0, 8))
 
         self.info_label = ctk.CTkLabel(
             self,
-            text="Keys are stored locally in SVMM_Data/config.json.",
+            text="Settings are stored locally in SVMM_Data/config.json.",
             font=font_small(),
             text_color=COLORS["text_muted"],
             anchor="w",
         )
-        self.info_label.grid(row=5, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 12))
+        self.info_label.grid(row=8, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 12))
 
         footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=6, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, SPACING["lg"]))
+        footer.grid(row=9, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, SPACING["lg"]))
         footer.grid_columnconfigure(1, weight=1)
 
         ctk.CTkButton(
@@ -87,6 +108,7 @@ class SettingsDialog(ctk.CTkToplevel):
             width=140,
             fg_color=COLORS["neutral_btn"],
             hover_color=COLORS["neutral_btn_hover"],
+            text_color=COLORS["neutral_btn_text"],
             command=self._clear_cache,
         ).grid(row=0, column=0, sticky="w")
 
@@ -96,6 +118,7 @@ class SettingsDialog(ctk.CTkToplevel):
             width=86,
             fg_color=COLORS["neutral_btn"],
             hover_color=COLORS["neutral_btn_hover"],
+            text_color=COLORS["neutral_btn_text"],
             command=self.destroy,
         ).grid(row=0, column=1, sticky="e", padx=(0, 8))
 
@@ -126,5 +149,7 @@ class SettingsDialog(ctk.CTkToplevel):
             self.gh_var.get().strip(),
             self.nexus_var.get().strip(),
             bool(self.auto_backup_var.get()),
+            bool(self.steam_var.get()),
+            self.args_var.get().strip(),
         )
         self.destroy()

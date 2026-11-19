@@ -70,6 +70,10 @@ def test_launch_game_invokes_popen_and_handles_oserror(
     assert ok and vanilla_name in msg
     assert calls[-1] == ([str(game / vanilla_name)], str(game))
 
+    ok, msg = launch_game(str(game), modded=True, launch_args="--skip-intro --test")
+    assert ok
+    assert calls[-1] == ([str(game / smapi_name), "--skip-intro", "--test"], str(game))
+
     def failing_popen(args: list[str], cwd: str) -> Any:
         raise OSError("permission denied")
 
