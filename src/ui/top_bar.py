@@ -48,6 +48,14 @@ class TopBar(ctk.CTkFrame):
         )
         self.title_label.grid(row=0, column=0, sticky="w")
 
+        self.bound_farms_label = ctk.CTkLabel(
+            header_row,
+            text="",
+            font=font_small(),
+            text_color=COLORS["text_muted"],
+            anchor="w",
+        )
+
         self.smapi_update_btn = ctk.CTkButton(
             header_row,
             text="",
@@ -110,6 +118,13 @@ class TopBar(ctk.CTkFrame):
 
     def set_active_modpack(self, name: str) -> None:
         self.title_label.configure(text=f"Modpack: {name}")
+
+    def set_bound_farms(self, farm_labels: list[str]) -> None:
+        if farm_labels:
+            self.bound_farms_label.configure(text=f"Bound Farms: {', '.join(farm_labels)}")
+            self.bound_farms_label.grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        else:
+            self.bound_farms_label.grid_remove()
 
     def set_path(self, path: str) -> None:
         self.game_path_var.set(path)

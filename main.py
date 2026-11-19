@@ -101,6 +101,7 @@ from src.core.modpack_bundle import export_modpack_bundle, import_modpack_bundle
 from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.save_backup import create_save_backup, get_default_saves_dir, prune_auto_backups
+from src.core.save_binding import list_farm_saves
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -384,7 +385,29 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_status=lambda msg, lvl: self.launch_bar.set_status(
                 msg, level=lvl, auto_clear_ms=4000
             ),
+            profile_ids=list(self.config_manager.profiles.keys()),
+            save_bindings=self.config_manager.save_bindings,
+            on_bind_save=self._on_bind_save,
         )
+
+    def _on_bind_save(self, save_folder: str, profile_id: str | None) -> None:
+        self.config_manager.bind_save(save_folder, profile_id)
+        self._refresh_bound_farms()
+        msg = (
+            f"Bound '{save_folder}' to modpack '{profile_id}'."
+            if profile_id
+            else f"Unbound '{save_folder}'."
+        )
+        self.launch_bar.set_status(msg, level="info", auto_clear_ms=4000)
+
+    def _refresh_bound_farms(self) -> None:
+        bound_folders = set(self.config_manager.get_saves_for_profile())
+        if not bound_folders:
+            self.top_bar.set_bound_farms([])
+            return
+        farms = {f.folder_name: f.display_label for f in list_farm_saves()}
+        labels = [farms.get(folder, folder) for folder in sorted(bound_folders)]
+        self.top_bar.set_bound_farms(labels)
 
     def _open_settings(self) -> None:
         SettingsDialog(
@@ -425,6 +448,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         active = self.config_manager.active_profile
         self.sidebar.render_profiles(self.config_manager.profiles, active)
         self.top_bar.set_active_modpack(active)
+        self._refresh_bound_farms()
 
     def _select_profile(self, profile_id: str) -> None:
         self.config_manager.active_profile = profile_id

@@ -33,6 +33,7 @@ class AppConfig(TypedDict):
     max_auto_backups: int
     launch_via_steam: bool
     launch_args: str
+    save_bindings: dict[str, str]
     profiles: dict[str, ProfileData]
 
 
@@ -46,6 +47,7 @@ DEFAULT_CONFIG: AppConfig = {
     "max_auto_backups": 5,
     "launch_via_steam": False,
     "launch_args": "",
+    "save_bindings": {},
     "profiles": {
         "Default": {
             "name": "Default",
@@ -192,6 +194,16 @@ class ConfigManager:
         else:
             normalized["active_profile"] = next(iter(normalized["profiles"]))
 
+        raw_bindings = raw.get("save_bindings")
+        if isinstance(raw_bindings, dict):
+            normalized["save_bindings"] = {
+                str(save_folder): str(pid)
+                for save_folder, pid in raw_bindings.items()
+                if isinstance(save_folder, str)
+                and isinstance(pid, str)
+                and pid in normalized["profiles"]
+            }
+
         return normalized
 
     @property
@@ -325,6 +337,9 @@ class ConfigManager:
         if len(self.profiles) <= 1:
             raise ValueError("Cannot delete the last remaining profile.")
         del self.profiles[profile_id]
+        self.data["save_bindings"] = {
+            s: pid for s, pid in self.save_bindings.items() if pid != profile_id
+        }
         if self.active_profile == profile_id:
             self.data["active_profile"] = next(iter(self.profiles))
         self.save()
@@ -410,7 +425,32 @@ class ConfigManager:
                 rebuilt[pid] = pdata
 
         self.data["profiles"] = rebuilt
+        self.data["save_bindings"] = {
+            s: (clean_new if pid == old_id else pid) for s, pid in self.save_bindings.items()
+        }
         if self.active_profile == old_id:
             self.data["active_profile"] = clean_new
         self.save()
         return clean_new
+
+    @property
+    def save_bindings(self) -> dict[str, str]:
+        """Return mapping of farm save folder names to bound profile IDs."""
+        return dict(self.data.get("save_bindings", {}))
+
+    def bind_save(self, save_folder: str, profile_id: str | None) -> None:
+        """Bind a farm save folder to profile_id, or unbind if profile_id is None."""
+        bindings = dict(self.data.get("save_bindings", {}))
+        if profile_id is None:
+            bindings.pop(save_folder, None)
+        else:
+            if profile_id not in self.profiles:
+                raise KeyError(f"Profile '{profile_id}' does not exist.")
+            bindings[save_folder] = profile_id
+        self.data["save_bindings"] = bindings
+        self.save()
+
+    def get_saves_for_profile(self, profile_id: str | None = None) -> list[str]:
+        """Return all farm save folder names bound to the given or active profile."""
+        pid = profile_id or self.active_profile
+        return [s for s, bound in self.save_bindings.items() if bound == pid]
