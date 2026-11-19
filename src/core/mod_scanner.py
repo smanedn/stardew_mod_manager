@@ -29,6 +29,7 @@ class ModInfo:
     author: str = ""
     description: str = ""
     minimum_api_version: str = ""
+    content_pack_for: str = ""
     has_manifest: bool = True
     error: str | None = None
     dependencies: tuple[ModDependency, ...] = ()
@@ -136,25 +137,36 @@ def parse_manifest(manifest_path: Path) -> dict[str, Any]:
     return parsed
 
 
-def _parse_dependencies(raw_deps: Any) -> tuple[ModDependency, ...]:
-    if not isinstance(raw_deps, list):
-        return ()
+def _parse_dependencies(
+    raw_deps: Any, raw_content_pack_for: Any = None
+) -> tuple[ModDependency, ...]:
     deps: list[ModDependency] = []
-    for item in raw_deps:
-        if not isinstance(item, dict):
-            continue
-        uid = str(item.get("UniqueID") or "").strip()
-        if not uid:
-            continue
-        is_req = item.get("IsRequired", True)
-        min_ver = str(item.get("MinimumVersion") or "").strip()
-        deps.append(
-            ModDependency(
-                unique_id=uid,
-                is_required=bool(is_req) if isinstance(is_req, bool) else True,
-                minimum_version=min_ver,
+    seen_ids: set[str] = set()
+
+    if isinstance(raw_content_pack_for, dict):
+        cpf_uid = str(raw_content_pack_for.get("UniqueID") or "").strip()
+        if cpf_uid:
+            cpf_min = str(raw_content_pack_for.get("MinimumVersion") or "").strip()
+            deps.append(ModDependency(unique_id=cpf_uid, is_required=True, minimum_version=cpf_min))
+            seen_ids.add(cpf_uid.lower())
+
+    if isinstance(raw_deps, list):
+        for item in raw_deps:
+            if not isinstance(item, dict):
+                continue
+            uid = str(item.get("UniqueID") or "").strip()
+            if not uid or uid.lower() in seen_ids:
+                continue
+            seen_ids.add(uid.lower())
+            is_req = item.get("IsRequired", True)
+            min_ver = str(item.get("MinimumVersion") or "").strip()
+            deps.append(
+                ModDependency(
+                    unique_id=uid,
+                    is_required=bool(is_req) if isinstance(is_req, bool) else True,
+                    minimum_version=min_ver,
+                )
             )
-        )
     return tuple(deps)
 
 
@@ -219,6 +231,10 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
             author = str(manifest.get("Author") or "").strip()
             description = str(manifest.get("Description") or "").strip()
             min_api = str(manifest.get("MinimumApiVersion") or "").strip()
+            raw_cpf = manifest.get("ContentPackFor")
+            cpf_uid = (
+                str(raw_cpf.get("UniqueID") or "").strip() if isinstance(raw_cpf, dict) else ""
+            )
             mods.append(
                 ModInfo(
                     folder_name=rel_folder,
@@ -229,8 +245,9 @@ def scan_mod_pool(mod_pool_path: str | Path = Path("SVMM_Data") / "mod_pool") ->
                     author=author,
                     description=description,
                     minimum_api_version=min_api,
+                    content_pack_for=cpf_uid,
                     has_manifest=True,
-                    dependencies=_parse_dependencies(manifest.get("Dependencies")),
+                    dependencies=_parse_dependencies(manifest.get("Dependencies"), raw_cpf),
                     update_keys=_parse_update_keys(manifest.get("UpdateKeys")),
                 )
             )

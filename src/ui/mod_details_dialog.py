@@ -60,6 +60,7 @@ class ModDetailsDialog(ctk.CTkToplevel):
         rows: list[tuple[str, str]] = [
             ("Folder:", mod.folder_name),
             ("UniqueID:", mod.unique_id or "Not specified"),
+            ("ContentPackFor:", mod.content_pack_for or "None"),
             ("Min SMAPI:", mod.minimum_api_version or "Not specified"),
             ("Description:", mod.description or "No description provided."),
             (

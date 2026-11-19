@@ -95,3 +95,22 @@ def test_scan_mod_pool_discovers_nested_modpack_folders(tmp_path: Path) -> None:
         "SVE Pack/[FTM] SVE",
     ]
     assert mods[0].name == "Stardew Valley Expanded"
+
+
+def test_scan_mod_pool_parses_content_pack_for_as_required_dependency(tmp_path: Path) -> None:
+    pool = tmp_path / "modpacks" / "Default"
+    pack_dir = pool / "[CP] MyPack"
+    pack_dir.mkdir(parents=True)
+    (pack_dir / "manifest.json").write_text(
+        '{"Name": "My Pack", "Version": "1.0.0", '
+        '"ContentPackFor": {"UniqueID": "Pathoschild.ContentPatcher", "MinimumVersion": "2.0.0"}}',
+        encoding="utf-8",
+    )
+
+    mods = scan_mod_pool(pool)
+    assert len(mods) == 1
+    assert mods[0].content_pack_for == "Pathoschild.ContentPatcher"
+    assert len(mods[0].dependencies) == 1
+    assert mods[0].dependencies[0].unique_id == "Pathoschild.ContentPatcher"
+    assert mods[0].dependencies[0].is_required is True
+    assert mods[0].dependencies[0].minimum_version == "2.0.0"
