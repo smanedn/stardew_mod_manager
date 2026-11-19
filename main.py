@@ -91,6 +91,7 @@ from src.core.mod_installer import install_mod_archive, parse_dropped_archive_pa
 from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
 from src.core.mod_scanner import ModInfo, scan_mod_pool
 from src.core.modlist_export import export_modlist
+from src.core.modpack_bundle import export_modpack_bundle, import_modpack_bundle
 from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.updater import (
@@ -98,6 +99,7 @@ from src.core.updater import (
     NexusUpdateProvider,
     UpdateChecker,
     UpdateResult,
+    can_direct_update,
     install_mod_update,
 )
 from src.ui.launch_bar import LaunchBar
@@ -158,6 +160,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
 
         self._scan_generation = 0
         self._current_mods: list[ModInfo] = []
+        self._last_update_results: list[UpdateResult] = []
         self._build_layout()
         self._bind_shortcuts()
         self._setup_drag_and_drop()
@@ -182,6 +185,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_export=self._export_profile,
             on_duplicate=self._duplicate_profile,
             on_share_modlist=self._share_modlist,
+            on_export_bundle=self._export_bundle,
+            on_import_bundle=self._import_bundle,
             on_open_saves=self._open_save_backups,
             on_open_smapi_log=self._open_smapi_log,
             on_open_settings=self._open_settings,
@@ -213,6 +218,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_check_updates=self._check_updates,
             on_show_details=self._show_mod_details,
             on_update_mod=self._update_single_mod,
+            on_update_all=self._update_all_mods,
             on_fix_deps=self._fix_missing_dependencies,
         )
         self.mod_list.grid(
@@ -436,6 +442,69 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         except OSError as exc:
             self.launch_bar.set_status(f"Export failed: {exc}", level="error")
 
+    def _export_bundle(self) -> None:
+        active = self.config_manager.active_profile
+        profile_name = self.config_manager.profiles[active]["name"]
+        enabled = self.config_manager.get_enabled_mods(active)
+        dest = filedialog.asksaveasfilename(
+            title="Export Full Modpack Bundle (.zip)",
+            defaultextension=".zip",
+            initialfile=f"{active}_modpack.zip",
+            filetypes=[("Zip archive", "*.zip")],
+        )
+        if not dest:
+            return
+
+        modpack_dir = self._active_modpack_dir()
+        self.launch_bar.set_status(f"Packaging '{active}' bundle...", level="info")
+
+        def worker() -> None:
+            try:
+                out = export_modpack_bundle(dest, active, profile_name, modpack_dir, enabled)
+                msg, lvl = f"Exported modpack bundle to {out.name}.", "success"
+            except OSError as exc:
+                msg, lvl = f"Bundle export failed: {exc}", "error"
+            self.after(0, lambda: self.launch_bar.set_status(msg, level=lvl, auto_clear_ms=5000))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _import_bundle(self) -> None:
+        src = filedialog.askopenfilename(
+            title="Import Modpack Bundle (.zip)",
+            filetypes=[("Zip archive", "*.zip")],
+        )
+        if not src:
+            return
+
+        self.mod_list.set_loading(True, f"Importing {Path(src).name}...")
+        self.launch_bar.set_status(f"Importing modpack bundle {Path(src).name}...", level="info")
+
+        def worker() -> None:
+            try:
+                new_id = import_modpack_bundle(src, MODPACKS_DIR, self.config_manager)
+                err = None
+            except (OSError, ValueError) as exc:
+                new_id = ""
+                err = str(exc)
+            self.after(0, lambda: self._on_bundle_imported(new_id, err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_bundle_imported(self, new_id: str, error: str | None) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_loading(False)
+        if error:
+            self.launch_bar.set_status(f"Bundle import failed: {error}", level="error")
+            self._refresh_mods()
+            return
+        self.config_manager.active_profile = new_id
+        self._refresh_profiles()
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Imported modpack bundle as '{new_id}'.", level="success", auto_clear_ms=5000
+        )
+
     def _import_profile(self) -> None:
         src = filedialog.askopenfilename(
             title="Import Modpack Profile",
@@ -528,6 +597,69 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         except OSError as exc:
             self.launch_bar.set_status(f"Export failed: {exc}", level="error")
 
+    def _export_bundle(self) -> None:
+        active = self.config_manager.active_profile
+        profile_name = self.config_manager.profiles[active]["name"]
+        enabled = self.config_manager.get_enabled_mods(active)
+        dest = filedialog.asksaveasfilename(
+            title="Export Full Modpack Bundle (.zip)",
+            defaultextension=".zip",
+            initialfile=f"{active}_modpack.zip",
+            filetypes=[("Zip archive", "*.zip")],
+        )
+        if not dest:
+            return
+
+        modpack_dir = self._active_modpack_dir()
+        self.launch_bar.set_status(f"Packaging '{active}' bundle...", level="info")
+
+        def worker() -> None:
+            try:
+                out = export_modpack_bundle(dest, active, profile_name, modpack_dir, enabled)
+                msg, lvl = f"Exported modpack bundle to {out.name}.", "success"
+            except OSError as exc:
+                msg, lvl = f"Bundle export failed: {exc}", "error"
+            self.after(0, lambda: self.launch_bar.set_status(msg, level=lvl, auto_clear_ms=5000))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _import_bundle(self) -> None:
+        src = filedialog.askopenfilename(
+            title="Import Modpack Bundle (.zip)",
+            filetypes=[("Zip archive", "*.zip")],
+        )
+        if not src:
+            return
+
+        self.mod_list.set_loading(True, f"Importing {Path(src).name}...")
+        self.launch_bar.set_status(f"Importing modpack bundle {Path(src).name}...", level="info")
+
+        def worker() -> None:
+            try:
+                new_id = import_modpack_bundle(src, MODPACKS_DIR, self.config_manager)
+                err = None
+            except (OSError, ValueError) as exc:
+                new_id = ""
+                err = str(exc)
+            self.after(0, lambda: self._on_bundle_imported(new_id, err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_bundle_imported(self, new_id: str, error: str | None) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_loading(False)
+        if error:
+            self.launch_bar.set_status(f"Bundle import failed: {error}", level="error")
+            self._refresh_mods()
+            return
+        self.config_manager.active_profile = new_id
+        self._refresh_profiles()
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Imported modpack bundle as '{new_id}'.", level="success", auto_clear_ms=5000
+        )
+
     def _open_nexus_dialog(self) -> None:
         active = self.config_manager.active_profile
         NexusBrowserDialog(
@@ -600,7 +732,11 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
     def _on_updates_checked(self, results: list[UpdateResult]) -> None:
         if not self.winfo_exists():
             return
+        self._last_update_results = results
         self.mod_list.set_updates(results)
+        has_nexus = bool(self.config_manager.nexus_api_key.strip())
+        updatable = [r for r in results if can_direct_update(r, has_nexus_key=has_nexus)]
+        self.mod_list.set_updatable_count(len(updatable))
         updates = [r for r in results if r.has_update]
         errors = [r for r in results if r.error]
         if updates:
@@ -679,6 +815,71 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             f"{err}\n\nOpen '{result.mod_name}' release page in your browser?",
         ):
             webbrowser.open(result.url)
+
+    def _update_all_mods(self) -> None:
+        has_nexus = bool(self.config_manager.nexus_api_key.strip())
+        targets = [
+            r for r in self._last_update_results if can_direct_update(r, has_nexus_key=has_nexus)
+        ]
+        if not targets:
+            return
+
+        active = self.config_manager.active_profile
+        modpack_dir = self._active_modpack_dir()
+        nexus_key = self.config_manager.nexus_api_key
+        gh_token = self.config_manager.github_token
+        self.mod_list.set_loading(True, f"Updating {len(targets)} mod(s)...")
+
+        def worker() -> None:
+            updated_folders: list[str] = []
+            failed: list[str] = []
+            total = len(targets)
+            for idx, res in enumerate(targets, start=1):
+                self.after(
+                    0,
+                    lambda i=idx, name=res.mod_name: self.launch_bar.set_status(
+                        f"Updating {i}/{total}: {name}...", level="info"
+                    ),
+                )
+                try:
+                    updated_folders.extend(
+                        install_mod_update(
+                            res,
+                            modpack_dir,
+                            nexus_api_key=nexus_key,
+                            github_token=gh_token,
+                        )
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    failed.append(f"{res.mod_name} ({exc})")
+            self.after(0, lambda: self._on_update_all_done(active, updated_folders, failed))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_all_done(
+        self, profile_id: str, updated_folders: list[str], failed: list[str]
+    ) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_loading(False)
+        self.mod_list.set_updatable_count(0)
+        self._last_update_results = []
+        if updated_folders:
+            current = self.config_manager.get_enabled_mods(profile_id)
+            self.config_manager.set_enabled_mods(current + updated_folders, profile_id)
+        self._refresh_mods()
+
+        if failed:
+            self.launch_bar.set_status(
+                f"Updated {len(updated_folders)} folder(s); {len(failed)} failed.",
+                level="warning",
+            )
+        else:
+            self.launch_bar.set_status(
+                f"Successfully updated {len(updated_folders)} mod folder(s)!",
+                level="success",
+                auto_clear_ms=5000,
+            )
 
     def _refresh_mods(self) -> None:
         self._scan_generation += 1

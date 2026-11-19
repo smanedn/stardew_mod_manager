@@ -274,3 +274,15 @@ def install_mod_update(
             return install_mod_zip(zip_path, modpack_dir)
 
     raise ValueError("No direct .zip download available for this release; open the release page.")
+
+
+def can_direct_update(result: UpdateResult, has_nexus_key: bool = False) -> bool:
+    """Return True if result can be updated directly via install_mod_update()."""
+    if not result.has_update:
+        return False
+    key_lower = result.update_key.lower()
+    if key_lower.startswith("github:") and result.download_url.startswith("https://"):
+        return True
+    if key_lower.startswith("nexus:") and has_nexus_key:
+        return True
+    return False

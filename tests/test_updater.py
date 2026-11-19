@@ -16,6 +16,7 @@ from src.core.updater import (
     NexusUpdateProvider,
     UpdateChecker,
     UpdateResult,
+    can_direct_update,
     install_mod_update,
     is_newer_version,
 )
@@ -187,3 +188,35 @@ def test_install_mod_update_downloads_github_zip_asset(
     installed = install_mod_update(res, modpack)
     assert installed == ["MyMod"]
     assert '"2.0.0"' in (modpack / "MyMod" / "manifest.json").read_text(encoding="utf-8")
+
+
+def test_can_direct_update_checks_provider_and_key() -> None:
+    gh_ok = UpdateResult(
+        folder_name="A",
+        mod_name="A",
+        current_version="1.0",
+        latest_version="2.0",
+        download_url="https://github.com/u/r/releases/download/v2.0/A.zip",
+        update_key="GitHub:u/r",
+        has_update=True,
+    )
+    gh_no_zip = UpdateResult(
+        folder_name="B",
+        mod_name="B",
+        current_version="1.0",
+        latest_version="2.0",
+        update_key="GitHub:u/r",
+        has_update=True,
+    )
+    nexus = UpdateResult(
+        folder_name="C",
+        mod_name="C",
+        current_version="1.0",
+        latest_version="2.0",
+        update_key="Nexus:1915",
+        has_update=True,
+    )
+    assert can_direct_update(gh_ok)
+    assert not can_direct_update(gh_no_zip)
+    assert not can_direct_update(nexus, has_nexus_key=False)
+    assert can_direct_update(nexus, has_nexus_key=True)

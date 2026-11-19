@@ -32,6 +32,8 @@ class ProfileSidebar(ctk.CTkFrame):
         on_open_smapi_log: Callable[[], None],
         on_open_settings: Callable[[], None],
         on_theme_change: Callable[[str], None],
+        on_export_bundle: Callable[[], None] | None = None,
+        on_import_bundle: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -149,6 +151,13 @@ class ProfileSidebar(ctk.CTkFrame):
         ctk.CTkButton(actions, text="Share List", command=on_share_modlist, **btn_cfg).grid(
             row=1, column=1, sticky="ew", padx=(3, 0), pady=2
         )
+        if on_import_bundle is not None and on_export_bundle is not None:
+            ctk.CTkButton(actions, text="Import .zip", command=on_import_bundle, **btn_cfg).grid(
+                row=2, column=0, sticky="ew", padx=(0, 3), pady=2
+            )
+            ctk.CTkButton(actions, text="Export .zip", command=on_export_bundle, **btn_cfg).grid(
+                row=2, column=1, sticky="ew", padx=(3, 0), pady=2
+            )
 
         self.delete_btn = ctk.CTkButton(
             self,
@@ -183,9 +192,10 @@ class ProfileSidebar(ctk.CTkFrame):
             "border_width": 1,
             "border_color": COLORS["border"],
         }
-        ctk.CTkButton(utils, text="Save Backups", command=on_open_saves, **util_cfg).grid(
-            row=0, column=0, sticky="ew", padx=(0, 3), pady=3
-        )
+        if on_open_saves is not None:
+            ctk.CTkButton(utils, text="Save Backups", command=on_open_saves, **util_cfg).grid(
+                row=0, column=0, sticky="ew", padx=(0, 3), pady=3
+            )
         ctk.CTkButton(utils, text="SMAPI Log", command=on_open_smapi_log, **util_cfg).grid(
             row=0, column=1, sticky="ew", padx=(3, 0), pady=3
         )

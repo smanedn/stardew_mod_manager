@@ -26,6 +26,7 @@ class ModListPanel(ctk.CTkFrame):
         on_check_updates: Callable[[], None],
         on_show_details: Callable[[ModInfo], None] | None = None,
         on_update_mod: Callable[[UpdateResult], None] | None = None,
+        on_update_all: Callable[[], None] | None = None,
         on_fix_deps: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
@@ -108,7 +109,7 @@ class ModListPanel(ctk.CTkFrame):
         # --- Row 1: Install & Maintenance Action Strip ---
         action_bar = ctk.CTkFrame(self, fg_color="transparent")
         action_bar.grid(row=1, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 6))
-        action_bar.grid_columnconfigure(4, weight=1)
+        action_bar.grid_columnconfigure(5, weight=1)
 
         self.install_btn = ctk.CTkButton(
             action_bar,
@@ -140,6 +141,17 @@ class ModListPanel(ctk.CTkFrame):
         )
         self.update_btn.grid(row=0, column=2, padx=(0, 6))
 
+        self.update_all_btn = ctk.CTkButton(
+            action_bar,
+            text="Update All",
+            height=30,
+            width=110,
+            font=font_small(),
+            fg_color=COLORS["success"],
+            hover_color=COLORS["success_hover"],
+            command=on_update_all,
+        )
+
         self.fix_deps_btn = ctk.CTkButton(
             action_bar,
             text="Fix Deps",
@@ -158,7 +170,7 @@ class ModListPanel(ctk.CTkFrame):
             font=font_small(),
             text_color=COLORS["text_muted"],
             anchor="e",
-        ).grid(row=0, column=4, sticky="e")
+        ).grid(row=0, column=5, sticky="e")
 
         # --- Row 2: Scrollable Mod Cards ---
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color=COLORS["bg_app"], corner_radius=8)
@@ -315,9 +327,16 @@ class ModListPanel(ctk.CTkFrame):
     def set_fixable_deps_count(self, count: int) -> None:
         if count > 0:
             self.fix_deps_btn.configure(text=f"Fix Deps ({count})")
-            self.fix_deps_btn.grid(row=0, column=3, padx=(0, 6))
+            self.fix_deps_btn.grid(row=0, column=4, padx=(0, 6))
         else:
             self.fix_deps_btn.grid_remove()
+
+    def set_updatable_count(self, count: int) -> None:
+        if count > 0:
+            self.update_all_btn.configure(text=f"Update All ({count})", state="normal")
+            self.update_all_btn.grid(row=0, column=3, padx=(0, 6))
+        else:
+            self.update_all_btn.grid_remove()
 
     def sync_enabled(self, enabled_mods: list[str]) -> None:
         enabled_set = set(enabled_mods)
