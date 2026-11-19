@@ -94,6 +94,7 @@ from src.core.modlist_export import export_modlist
 from src.core.modpack_bundle import export_modpack_bundle, import_modpack_bundle
 from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
+from src.core.save_backup import create_save_backup, get_default_saves_dir, prune_auto_backups
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -191,6 +192,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_open_smapi_log=self._open_smapi_log,
             on_open_settings=self._open_settings,
             on_theme_change=self._on_theme_changed,
+            on_rename=self._rename_active_profile,
         )
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -352,6 +354,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             self,
             github_token=self.config_manager.github_token,
             nexus_api_key=self.config_manager.nexus_api_key,
+            auto_backup_saves=self.config_manager.auto_backup_saves,
+            max_auto_backups=self.config_manager.max_auto_backups,
             update_cache_path=UPDATE_CACHE_FILE,
             on_save=self._save_settings,
             on_cache_cleared=lambda: self.launch_bar.set_status(
@@ -359,9 +363,12 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             ),
         )
 
-    def _save_settings(self, github_token: str, nexus_api_key: str) -> None:
+    def _save_settings(
+        self, github_token: str, nexus_api_key: str, auto_backup_saves: bool
+    ) -> None:
         self.config_manager.github_token = github_token
         self.config_manager.nexus_api_key = nexus_api_key
+        self.config_manager.auto_backup_saves = auto_backup_saves
         self.launch_bar.set_status("Saved settings.", level="success", auto_clear_ms=3000)
 
     def _on_theme_changed(self, mode: str) -> None:
@@ -420,6 +427,37 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self._refresh_mods()
         self.launch_bar.set_status(
             f"Deleted profile '{active}' (mod files kept on disk).", level="info"
+        )
+
+    def _rename_active_profile(self) -> None:
+        active = self.config_manager.active_profile
+        dialog = ctk.CTkInputDialog(
+            text=f"Rename modpack '{active}' to:",
+            title="Rename Modpack",
+        )
+        new_name = dialog.get_input()
+        if not new_name:
+            return
+        try:
+            new_id = self.config_manager.rename_profile(active, new_name)
+            if new_id != active:
+                old_dir = MODPACKS_DIR / active
+                new_dir = MODPACKS_DIR / new_id
+                if old_dir.is_dir() and not new_dir.exists():
+                    old_dir.rename(new_dir)
+                else:
+                    new_dir.mkdir(parents=True, exist_ok=True)
+                old_profile_dir = PROFILES_DIR / active
+                if old_profile_dir.is_dir():
+                    shutil.rmtree(old_profile_dir, ignore_errors=True)
+        except (OSError, ValueError, KeyError) as exc:
+            self.launch_bar.set_status(f"Rename failed: {exc}", level="error")
+            return
+
+        self._refresh_profiles()
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Renamed '{active}' to '{new_id}'.", level="success", auto_clear_ms=4000
         )
 
     def _export_profile(self) -> None:
@@ -982,12 +1020,19 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
                 return
 
         modpack_dir = self._active_modpack_dir()
+        auto_backup = self.config_manager.auto_backup_saves
+        max_auto = self.config_manager.max_auto_backups
 
         self.launch_bar.set_busy(True)
         self.launch_bar.set_status(f"Syncing '{active}' and launching SMAPI...", level="info")
 
         def worker() -> None:
             try:
+                if auto_backup:
+                    saves_dir = get_default_saves_dir()
+                    if saves_dir.is_dir():
+                        create_save_backup(saves_dir, SAVE_BACKUPS_DIR, label="auto")
+                        prune_auto_backups(SAVE_BACKUPS_DIR, keep=max_auto)
                 profile_dir = sync_profile(active, enabled, modpack_dir, PROFILES_DIR)
                 ok, msg = link_game_mods(game_path, profile_dir)
                 if ok:

@@ -117,6 +117,19 @@ def test_duplicate_profile_creates_copy_with_mods(tmp_path: Path) -> None:
     assert cfg.get_enabled_mods(copy_id) == ["ModA", "ModB"]
 
 
+def test_rename_profile_updates_active_and_preserves_mods(tmp_path: Path) -> None:
+    cfg = ConfigManager(tmp_path / "config.json")
+    cfg.create_profile("OldPack")
+    cfg.active_profile = "OldPack"
+    cfg.set_enabled_mods(["ModA"], "OldPack")
+
+    new_id = cfg.rename_profile("OldPack", "  NewPack  ")
+    assert new_id == "NewPack"
+    assert cfg.active_profile == "NewPack"
+    assert "OldPack" not in cfg.profiles
+    assert cfg.get_enabled_mods("NewPack") == ["ModA"]
+
+
 def test_import_invalid_profile_raises(tmp_path: Path) -> None:
     cfg = ConfigManager(tmp_path / "config.json")
     bad_file = tmp_path / "bad.json"

@@ -18,13 +18,15 @@ class SettingsDialog(ctk.CTkToplevel):
         master: ctk.CTkBaseClass,
         github_token: str,
         nexus_api_key: str,
+        auto_backup_saves: bool,
+        max_auto_backups: int,
         update_cache_path: Path,
-        on_save: Callable[[str, str], None],
+        on_save: Callable[[str, str, bool], None],
         on_cache_cleared: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(master)
         self.title("Settings")
-        self.geometry("520x300")
+        self.geometry("520x340")
         self.resizable(False, False)
         self.transient(master)
         self.grab_set()
@@ -57,7 +59,14 @@ class SettingsDialog(ctk.CTkToplevel):
         self.nexus_var = ctk.StringVar(value=nexus_api_key)
         ctk.CTkEntry(
             self, textvariable=self.nexus_var, show="*", placeholder_text="Paste Nexus API key..."
-        ).grid(row=3, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 8))
+        ).grid(row=3, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 10))
+
+        self.auto_backup_var = ctk.BooleanVar(value=auto_backup_saves)
+        ctk.CTkCheckBox(
+            self,
+            text=f"Auto-backup saves before modded launch (keeps last {max_auto_backups})",
+            variable=self.auto_backup_var,
+        ).grid(row=4, column=0, sticky="w", padx=SPACING["lg"], pady=(0, 8))
 
         self.info_label = ctk.CTkLabel(
             self,
@@ -66,10 +75,10 @@ class SettingsDialog(ctk.CTkToplevel):
             text_color=COLORS["text_muted"],
             anchor="w",
         )
-        self.info_label.grid(row=4, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 12))
+        self.info_label.grid(row=5, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, 12))
 
         footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.grid(row=5, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, SPACING["lg"]))
+        footer.grid(row=6, column=0, sticky="ew", padx=SPACING["lg"], pady=(0, SPACING["lg"]))
         footer.grid_columnconfigure(1, weight=1)
 
         ctk.CTkButton(
@@ -113,5 +122,9 @@ class SettingsDialog(ctk.CTkToplevel):
             )
 
     def _save(self) -> None:
-        self._on_save(self.gh_var.get().strip(), self.nexus_var.get().strip())
+        self._on_save(
+            self.gh_var.get().strip(),
+            self.nexus_var.get().strip(),
+            bool(self.auto_backup_var.get()),
+        )
         self.destroy()

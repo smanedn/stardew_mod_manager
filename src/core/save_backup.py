@@ -130,3 +130,15 @@ def restore_save_backup(backup_zip: str | Path, saves_dir: str | Path) -> None:
         if dest_dir.exists():
             shutil.rmtree(dest_dir)
         shutil.copytree(stage, dest_dir)
+
+
+def prune_auto_backups(backups_root: str | Path, keep: int = 5) -> int:
+    """Keep only the newest `keep` auto-backups (Saves_auto_*.zip) and return deleted count."""
+    if keep < 1:
+        return 0
+    auto_backups = [b for b in list_save_backups(backups_root) if b.name.startswith("Saves_auto_")]
+    deleted = 0
+    for old in auto_backups[keep:]:
+        old.path.unlink(missing_ok=True)
+        deleted += 1
+    return deleted

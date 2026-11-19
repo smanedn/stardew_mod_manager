@@ -29,6 +29,8 @@ class AppConfig(TypedDict):
     appearance_mode: str
     github_token: str
     nexus_api_key: str
+    auto_backup_saves: bool
+    max_auto_backups: int
     profiles: dict[str, ProfileData]
 
 
@@ -38,6 +40,8 @@ DEFAULT_CONFIG: AppConfig = {
     "appearance_mode": "dark",
     "github_token": "",
     "nexus_api_key": "",
+    "auto_backup_saves": False,
+    "max_auto_backups": 5,
     "profiles": {
         "Default": {
             "name": "Default",
@@ -145,6 +149,14 @@ class ConfigManager:
         if isinstance(nexus_key, str):
             normalized["nexus_api_key"] = nexus_key.strip()
 
+        auto_backup = raw.get("auto_backup_saves")
+        if isinstance(auto_backup, bool):
+            normalized["auto_backup_saves"] = auto_backup
+
+        max_backups = raw.get("max_auto_backups")
+        if isinstance(max_backups, int) and max_backups >= 1:
+            normalized["max_auto_backups"] = max_backups
+
         raw_profiles = raw.get("profiles")
         if isinstance(raw_profiles, dict) and raw_profiles:
             profiles: dict[str, ProfileData] = {}
@@ -212,6 +224,22 @@ class ConfigManager:
     def nexus_api_key(self, key: str) -> None:
         self.data["nexus_api_key"] = key.strip()
         self.save()
+
+    @property
+    def auto_backup_saves(self) -> bool:
+        """Return whether saves are automatically backed up before modded launches."""
+        return bool(self.data.get("auto_backup_saves", False))
+
+    @auto_backup_saves.setter
+    def auto_backup_saves(self, enabled: bool) -> None:
+        self.data["auto_backup_saves"] = bool(enabled)
+        self.save()
+
+    @property
+    def max_auto_backups(self) -> int:
+        """Return maximum number of automatic save backups to retain."""
+        val = self.data.get("max_auto_backups", 5)
+        return val if isinstance(val, int) and val >= 1 else 5
 
     @property
     def active_profile(self) -> str:
@@ -328,3 +356,29 @@ class ConfigManager:
         }
         self.save()
         return target_id
+
+    def rename_profile(self, old_id: str, new_id: str) -> str:
+        """Rename an existing profile ID and return the validated new ID."""
+        if old_id not in self.profiles:
+            raise KeyError(f"Profile '{old_id}' does not exist.")
+        clean_new = validate_profile_name(new_id)
+        if clean_new == old_id:
+            return old_id
+        if clean_new in self.profiles:
+            raise ValueError(f"Profile '{clean_new}' already exists.")
+
+        rebuilt: dict[str, ProfileData] = {}
+        for pid, pdata in self.profiles.items():
+            if pid == old_id:
+                rebuilt[clean_new] = {
+                    "name": clean_new,
+                    "enabled_mods": list(pdata.get("enabled_mods", [])),
+                }
+            else:
+                rebuilt[pid] = pdata
+
+        self.data["profiles"] = rebuilt
+        if self.active_profile == old_id:
+            self.data["active_profile"] = clean_new
+        self.save()
+        return clean_new

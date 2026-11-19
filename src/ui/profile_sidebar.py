@@ -34,6 +34,7 @@ class ProfileSidebar(ctk.CTkFrame):
         on_theme_change: Callable[[str], None],
         on_export_bundle: Callable[[], None] | None = None,
         on_import_bundle: Callable[[], None] | None = None,
+        on_rename: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -159,9 +160,26 @@ class ProfileSidebar(ctk.CTkFrame):
                 row=2, column=1, sticky="ew", padx=(3, 0), pady=2
             )
 
+        manage_row = ctk.CTkFrame(self, fg_color="transparent")
+        manage_row.grid(row=5, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 10))
+        manage_row.grid_columnconfigure(0, weight=1)
+        manage_row.grid_columnconfigure(1, weight=1)
+
+        if on_rename is not None:
+            ctk.CTkButton(
+                manage_row,
+                text="Rename",
+                height=28,
+                font=font_small(),
+                fg_color=COLORS["neutral_btn"],
+                hover_color=COLORS["neutral_btn_hover"],
+                text_color=COLORS["neutral_btn_text"],
+                command=on_rename,
+            ).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+
         self.delete_btn = ctk.CTkButton(
-            self,
-            text="Delete Active Modpack",
+            manage_row,
+            text="Delete",
             height=28,
             font=font_small(),
             fg_color="transparent",
@@ -171,7 +189,13 @@ class ProfileSidebar(ctk.CTkFrame):
             text_color=COLORS["error_text"],
             command=on_delete,
         )
-        self.delete_btn.grid(row=5, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 10))
+        self.delete_btn.grid(
+            row=0,
+            column=1 if on_rename is not None else 0,
+            columnspan=1 if on_rename else 2,
+            sticky="ew",
+            padx=(3 if on_rename else 0, 0),
+        )
 
         # --- Divider & Utilities ---
         ctk.CTkFrame(self, height=1, fg_color=COLORS["border"]).grid(

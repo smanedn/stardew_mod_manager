@@ -8,6 +8,7 @@ import pytest
 from src.core.save_backup import (
     create_save_backup,
     list_save_backups,
+    prune_auto_backups,
     restore_save_backup,
 )
 
@@ -46,3 +47,23 @@ def test_restore_save_backup_blocks_zip_slip(tmp_path: Path) -> None:
 def test_create_save_backup_missing_dir_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         create_save_backup(tmp_path / "missing_saves", tmp_path / "backups")
+
+
+def test_prune_auto_backups_keeps_manual_and_newest_auto(tmp_path: Path) -> None:
+    import os
+
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    manual = backups / "Saves_manual_2026.zip"
+    manual.write_text("m", encoding="utf-8")
+
+    auto_files = [backups / f"Saves_auto_2026-11-18_00-00-0{i}.zip" for i in range(5)]
+    for idx, f in enumerate(auto_files):
+        f.write_text("a", encoding="utf-8")
+        os.utime(f, (1000 + idx, 1000 + idx))
+
+    deleted = prune_auto_backups(backups, keep=2)
+    assert deleted == 3
+    remaining = {b.name for b in list_save_backups(backups)}
+    assert manual.name in remaining
+    assert auto_files[3].name in remaining and auto_files[4].name in remaining
