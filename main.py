@@ -453,16 +453,28 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self.launch_bar.set_status("Saved settings.", level="success", auto_clear_ms=3000)
 
     def _apply_and_refresh_theme(self, theme_name: str, custom_theme: dict[str, str]) -> None:
-        resolved = apply_theme(theme_name, custom_theme)
-        self.config_manager.theme = resolved
-        self.config_manager.custom_theme = custom_theme
-        self.configure(fg_color=COLORS["bg_app"])
+        if hasattr(self, "mod_list") and self.mod_list._search_after_id is not None:
+            try:
+                self.mod_list.after_cancel(self.mod_list._search_after_id)
+            except tk.TclError:
+                pass
+            self.mod_list._search_after_id = None
+        if hasattr(self, "launch_bar") and self.launch_bar._toast_after_id is not None:
+            try:
+                self.launch_bar.after_cancel(self.launch_bar._toast_after_id)
+            except tk.TclError:
+                pass
+            self.launch_bar._toast_after_id = None
 
-        # Rebuild main window layout so every widget reflects the new theme palette live
         for attr in ("sidebar", "top_bar", "mod_list", "launch_bar"):
             widget = getattr(self, attr, None)
             if widget is not None and widget.winfo_exists():
                 widget.destroy()
+
+        resolved = apply_theme(theme_name, custom_theme)
+        self.config_manager.theme = resolved
+        self.config_manager.custom_theme = custom_theme
+        self.configure(fg_color=COLORS["bg_app"])
 
         self._build_layout()
         self._validate_game_path(self.config_manager.game_path)
@@ -1186,7 +1198,9 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
                     self.after(
                         0,
                         lambda f=mod.folder_name, im=img: (
-                            self.mod_list.update_mod_icon(f, im) if self.winfo_exists() else None
+                            self.mod_list.update_mod_icon(f, im)
+                            if self.winfo_exists() and self.mod_list.winfo_exists()
+                            else None
                         ),
                     )
 

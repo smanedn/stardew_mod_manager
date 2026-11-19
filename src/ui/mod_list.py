@@ -389,12 +389,19 @@ class ModListPanel(ctk.CTkFrame):
 
     def update_mod_icon(self, folder_name: str, pil_image: Image.Image) -> None:
         """Update a mod card's thumbnail image after an async fetch."""
+        if not self.winfo_exists():
+            return
         row = self._mod_rows.get(folder_name)
         if row is None:
             return
         card, img_lbl, _old_img, *rest = row
+        if not img_lbl.winfo_exists():
+            return
         new_img = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(42, 42))
-        img_lbl.configure(image=new_img)
+        try:
+            img_lbl.configure(image=new_img)
+        except tk.TclError:
+            return
         self._mod_rows[folder_name] = (card, img_lbl, new_img, *rest)
 
     def _show_details(self, mod: ModInfo) -> None:

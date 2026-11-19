@@ -488,7 +488,10 @@ class SettingsDialog(ctk.CTkToplevel):
                 text="Applied Custom theme.", text_color=COLORS["success_text"]
             )
         self._on_apply_theme(name, self._collect_custom_theme())
-        self._refresh_preset_highlights()
+        if self.winfo_exists():
+            self._refresh_preset_highlights()
+            self.lift()
+            self.focus_force()
 
     def _refresh_preset_highlights(self) -> None:
         for name, btn in self._preset_buttons.items():
@@ -525,10 +528,13 @@ class SettingsDialog(ctk.CTkToplevel):
             swatch.configure(fg_color=val, hover_color=val)
         self._selected_theme = "Custom"
         self._on_apply_theme("Custom", custom)
-        self._refresh_preset_highlights()
-        self.info_label.configure(
-            text="Applied Custom theme live.", text_color=COLORS["success_text"]
-        )
+        if self.winfo_exists():
+            self._refresh_preset_highlights()
+            self.lift()
+            self.focus_force()
+            self.info_label.configure(
+                text="Applied Custom theme live.", text_color=COLORS["success_text"]
+            )
 
     def _clear_cache(self) -> None:
         if self._update_cache_path.is_file():
