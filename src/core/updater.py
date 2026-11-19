@@ -286,3 +286,31 @@ def can_direct_update(result: UpdateResult, has_nexus_key: bool = False) -> bool
     if key_lower.startswith("nexus:") and has_nexus_key:
         return True
     return False
+
+
+def check_smapi_update(
+    installed_version: str | None,
+    github_token: str = "",
+    cache_path: str | Path | None = None,
+    cache_ttl_seconds: float = 3600.0,
+) -> tuple[str, str] | None:
+    """Return (latest_version, release_url) if a newer SMAPI release exists, else None."""
+    if not installed_version or not installed_version.strip():
+        return None
+
+    dummy_smapi = ModInfo(
+        folder_name="SMAPI",
+        name="SMAPI",
+        version=installed_version.strip(),
+        path=Path("."),
+        update_keys=("GitHub:Pathoschild/SMAPI",),
+    )
+    checker = UpdateChecker(
+        providers=[GitHubUpdateProvider(token=github_token)],
+        cache_path=cache_path,
+        cache_ttl_seconds=cache_ttl_seconds,
+    )
+    results = checker.check_mods([dummy_smapi])
+    if results and results[0].has_update and not results[0].error:
+        return results[0].latest_version, results[0].url
+    return None

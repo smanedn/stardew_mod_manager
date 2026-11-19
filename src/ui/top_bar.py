@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Callable
 
 import customtkinter as ctk
@@ -47,6 +48,18 @@ class TopBar(ctk.CTkFrame):
         )
         self.title_label.grid(row=0, column=0, sticky="w")
 
+        self.smapi_update_btn = ctk.CTkButton(
+            header_row,
+            text="",
+            height=24,
+            width=120,
+            font=font_small(),
+            fg_color=COLORS["warning_bg"],
+            hover_color=COLORS["warning_text"],
+            text_color=COLORS["warning_text"],
+            corner_radius=6,
+        )
+
         self.validation_label = ctk.CTkLabel(
             header_row,
             text="● Checking...",
@@ -57,7 +70,7 @@ class TopBar(ctk.CTkFrame):
             padx=10,
             pady=3,
         )
-        self.validation_label.grid(row=0, column=1, sticky="e")
+        self.validation_label.grid(row=0, column=2, sticky="e")
 
         # --- Row 1: Game Path Input + Subtle Actions ---
         ctk.CTkLabel(
@@ -112,3 +125,13 @@ class TopBar(ctk.CTkFrame):
         else:
             color = COLORS["error_text"]
         self.validation_label.configure(text=f"● {message}", text_color=color)
+
+    def set_smapi_update(self, latest_version: str | None, url: str = "") -> None:
+        if latest_version:
+            self.smapi_update_btn.configure(
+                text=f"↑ SMAPI v{latest_version}",
+                command=lambda u=url or "https://smapi.io/": webbrowser.open(u),
+            )
+            self.smapi_update_btn.grid(row=0, column=1, padx=(0, 8), sticky="e")
+        else:
+            self.smapi_update_btn.grid_remove()

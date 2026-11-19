@@ -17,6 +17,7 @@ from src.core.updater import (
     UpdateChecker,
     UpdateResult,
     can_direct_update,
+    check_smapi_update,
     install_mod_update,
     is_newer_version,
 )
@@ -220,3 +221,30 @@ def test_can_direct_update_checks_provider_and_key() -> None:
     assert not can_direct_update(gh_no_zip)
     assert not can_direct_update(nexus, has_nexus_key=False)
     assert can_direct_update(nexus, has_nexus_key=True)
+
+
+def test_check_smapi_update_detects_newer_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert check_smapi_update(None) is None
+
+    class _FakeResp:
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "tag_name": "4.2.0",
+                    "html_url": "https://github.com/Pathoschild/SMAPI/releases/tag/4.2.0",
+                }
+            ).encode("utf-8")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda _req, timeout=5.0: _FakeResp())
+    cache_file = tmp_path / "cache.json"
+    res = check_smapi_update("4.1.10", cache_path=cache_file)
+    assert res == ("4.2.0", "https://github.com/Pathoschild/SMAPI/releases/tag/4.2.0")
+    assert check_smapi_update("4.2.0", cache_path=cache_file) is None

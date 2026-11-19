@@ -101,6 +101,7 @@ from src.core.updater import (
     UpdateChecker,
     UpdateResult,
     can_direct_update,
+    check_smapi_update,
     install_mod_update,
 )
 from src.ui.launch_bar import LaunchBar
@@ -310,7 +311,35 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
 
     def _validate_game_path(self, path: str) -> None:
         has_vanilla, has_smapi, msg = validate_game_path(path)
+        if has_smapi:
+            smapi_ver = get_installed_smapi_version(path)
+            if smapi_ver:
+                msg = f"{msg} (v{smapi_ver})"
+                self._check_smapi_update_async(smapi_ver)
+            else:
+                self.top_bar.set_smapi_update(None)
+        else:
+            self.top_bar.set_smapi_update(None)
         self.top_bar.set_validation_status(has_vanilla, has_smapi, msg)
+
+    def _check_smapi_update_async(self, installed_ver: str) -> None:
+        token = self.config_manager.github_token
+
+        def worker() -> None:
+            res = check_smapi_update(
+                installed_ver, github_token=token, cache_path=UPDATE_CACHE_FILE
+            )
+            self.after(0, lambda: self._on_smapi_update_checked(res))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_smapi_update_checked(self, result: tuple[str, str] | None) -> None:
+        if not self.winfo_exists():
+            return
+        if result is not None:
+            self.top_bar.set_smapi_update(result[0], result[1])
+        else:
+            self.top_bar.set_smapi_update(None)
 
     def _on_game_path_changed(self, new_path: str) -> None:
         self.config_manager.game_path = new_path
