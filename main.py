@@ -102,6 +102,7 @@ from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.save_backup import create_save_backup, get_default_saves_dir, prune_auto_backups
 from src.core.save_binding import list_farm_saves
+from src.core.smapi_compat import SmapiCompatInfo, check_smapi_compatibility
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -127,6 +128,7 @@ MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
 PROFILES_DIR = PROJECT_ROOT / "SVMM_Data" / "profiles"
 CONFIG_FILE = PROJECT_ROOT / "SVMM_Data" / "config.json"
 UPDATE_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "update_cache.json"
+SMAPI_COMPAT_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "smapi_compat_cache.json"
 SAVE_BACKUPS_DIR = PROJECT_ROOT / "SVMM_Data" / "save_backups"
 LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
 ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
@@ -232,6 +234,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_update_mod=self._update_single_mod,
             on_update_all=self._update_all_mods,
             on_fix_deps=self._fix_missing_dependencies,
+            on_check_compat=self._check_smapi_compat,
         )
         self.mod_list.grid(
             row=1,
@@ -942,6 +945,45 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         else:
             self.launch_bar.set_status(
                 f"Checked {len(results)} mod(s) with UpdateKeys: all up to date.",
+                level="success",
+                auto_clear_ms=5000,
+            )
+
+    def _check_smapi_compat(self) -> None:
+        if not self._current_mods:
+            self.launch_bar.set_status("No mods to check compatibility for.", level="info")
+            return
+
+        mods_snapshot = list(self._current_mods)
+        self.launch_bar.set_status("Checking smapi.io compatibility database...", level="info")
+
+        def worker() -> None:
+            compat_map = check_smapi_compatibility(
+                mods_snapshot, cache_path=SMAPI_COMPAT_CACHE_FILE
+            )
+            self.after(0, lambda: self._on_compat_checked(compat_map))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_compat_checked(self, compat_map: dict[str, SmapiCompatInfo]) -> None:
+        if not self.winfo_exists():
+            return
+        self.mod_list.set_compat(compat_map)
+        if not compat_map:
+            self.launch_bar.set_status(
+                "No compatibility data returned (offline or no UniqueIDs).", level="warning"
+            )
+            return
+        broken = sum(1 for c in compat_map.values() if c.is_broken)
+        warnings = sum(1 for c in compat_map.values() if c.is_warning)
+        if broken or warnings:
+            self.launch_bar.set_status(
+                f"SMAPI Compat: {broken} broken/obsolete, {warnings} unofficial/workaround.",
+                level="warning",
+            )
+        else:
+            self.launch_bar.set_status(
+                f"SMAPI Compat: all {len(compat_map)} checked mod(s) compatible!",
                 level="success",
                 auto_clear_ms=5000,
             )

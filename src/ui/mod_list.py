@@ -8,6 +8,7 @@ import customtkinter as ctk
 
 from src.core.dependencies import ModIssue
 from src.core.mod_scanner import ModInfo
+from src.core.smapi_compat import SmapiCompatInfo
 from src.core.updater import UpdateResult
 from src.ui.theme import COLORS, SPACING, font_bold, font_small
 from src.ui.tooltip import ToolTip
@@ -28,6 +29,7 @@ class ModListPanel(ctk.CTkFrame):
         on_update_mod: Callable[[UpdateResult], None] | None = None,
         on_update_all: Callable[[], None] | None = None,
         on_fix_deps: Callable[[], None] | None = None,
+        on_check_compat: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -46,13 +48,16 @@ class ModListPanel(ctk.CTkFrame):
         self._status_filter = "all"
         self._issue_folders: set[str] = set()
         self._update_folders: set[str] = set()
-        # folder -> (card_frame, switch, var, warning_label, warning_tip, update_btn, update_tip)
+        # folder -> (card, switch, var, compat_lbl, compat_tip,
+        #            warn_lbl, warn_tip, upd_btn, upd_tip)
         self._mod_rows: dict[
             str,
             tuple[
                 ctk.CTkFrame,
                 ctk.CTkSwitch,
                 ctk.BooleanVar,
+                ctk.CTkLabel,
+                ToolTip,
                 ctk.CTkLabel,
                 ToolTip,
                 ctk.CTkButton,
@@ -112,7 +117,7 @@ class ModListPanel(ctk.CTkFrame):
         # --- Row 1: Install & Maintenance Action Strip ---
         action_bar = ctk.CTkFrame(self, fg_color="transparent")
         action_bar.grid(row=1, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 6))
-        action_bar.grid_columnconfigure(5, weight=1)
+        action_bar.grid_columnconfigure(6, weight=1)
 
         self.install_btn = ctk.CTkButton(
             action_bar,
@@ -144,6 +149,15 @@ class ModListPanel(ctk.CTkFrame):
         )
         self.update_btn.grid(row=0, column=2, padx=(0, 6))
 
+        if on_check_compat is not None:
+            ctk.CTkButton(
+                action_bar,
+                text="SMAPI Compat",
+                width=108,
+                command=on_check_compat,
+                **subtle_btn,
+            ).grid(row=0, column=3, padx=(0, 6))
+
         self.update_all_btn = ctk.CTkButton(
             action_bar,
             text="Update All",
@@ -173,7 +187,7 @@ class ModListPanel(ctk.CTkFrame):
             font=font_small(),
             text_color=COLORS["text_muted"],
             anchor="e",
-        ).grid(row=0, column=5, sticky="e")
+        ).grid(row=0, column=6, sticky="e")
 
         # --- Row 2: Quick Filter Chips ---
         chip_bar = ctk.CTkFrame(self, fg_color="transparent")
@@ -295,6 +309,18 @@ class ModListPanel(ctk.CTkFrame):
             ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(0, 8))
 
             # Right badges + Details button
+            compat_lbl = ctk.CTkLabel(
+                card,
+                text="",
+                font=font_small(),
+                fg_color=COLORS["surface_alt"],
+                text_color=COLORS["text_muted"],
+                corner_radius=6,
+                padx=8,
+                pady=2,
+            )
+            compat_tip = ToolTip(compat_lbl, "")
+
             warn_lbl = ctk.CTkLabel(
                 card,
                 text="",
@@ -329,12 +355,14 @@ class ModListPanel(ctk.CTkFrame):
                     hover_color=COLORS["neutral_btn_hover"],
                     text_color=COLORS["neutral_btn_text"],
                     command=lambda m=mod: self._show_details(m),
-                ).grid(row=0, column=4, rowspan=2, padx=(4, 10), pady=8)
+                ).grid(row=0, column=5, rowspan=2, padx=(4, 10), pady=8)
 
             self._mod_rows[mod.folder_name] = (
                 card,
                 switch,
                 var,
+                compat_lbl,
+                compat_tip,
                 warn_lbl,
                 warn_tip,
                 upd_btn,
@@ -350,14 +378,14 @@ class ModListPanel(ctk.CTkFrame):
     def set_fixable_deps_count(self, count: int) -> None:
         if count > 0:
             self.fix_deps_btn.configure(text=f"Fix Deps ({count})")
-            self.fix_deps_btn.grid(row=0, column=4, padx=(0, 6))
+            self.fix_deps_btn.grid(row=0, column=5, padx=(0, 6))
         else:
             self.fix_deps_btn.grid_remove()
 
     def set_updatable_count(self, count: int) -> None:
         if count > 0:
             self.update_all_btn.configure(text=f"Update All ({count})", state="normal")
-            self.update_all_btn.grid(row=0, column=3, padx=(0, 6))
+            self.update_all_btn.grid(row=0, column=4, padx=(0, 6))
         else:
             self.update_all_btn.grid_remove()
 
@@ -367,13 +395,35 @@ class ModListPanel(ctk.CTkFrame):
             var.set(folder in enabled_set)
         self._update_count()
 
+    def set_compat(self, compat_map: dict[str, SmapiCompatInfo]) -> None:
+        for folder, (_, _, _, compat_lbl, compat_tip, _, _, _, _) in self._mod_rows.items():
+            info = compat_map.get(folder)
+            if not info:
+                compat_lbl.grid_remove()
+                compat_tip.update_text("")
+                continue
+            if info.is_broken:
+                fg, tc = COLORS["danger"], ("#FFFFFF", "#FFFFFF")
+            elif info.is_warning:
+                fg, tc = COLORS["warning_bg"], COLORS["warning_text"]
+            else:
+                fg, tc = COLORS["surface_alt"], COLORS["success_text"]
+            compat_lbl.configure(text=info.status, fg_color=fg, text_color=tc)
+            compat_lbl.grid(row=0, column=2, rowspan=2, padx=(4, 4))
+            tip_lines = [f"SMAPI Status: {info.status}"]
+            if info.summary:
+                tip_lines.append(info.summary)
+            if info.unofficial_version:
+                tip_lines.append(f"Unofficial 1.6 Update: v{info.unofficial_version}")
+            compat_tip.update_text("\n".join(tip_lines))
+
     def set_issues(self, issues: dict[str, list[ModIssue]]) -> None:
         self._issue_folders = set(issues.keys())
-        for folder, (_, _, _, warn_lbl, warn_tip, _, _) in self._mod_rows.items():
+        for folder, (_, _, _, _, _, warn_lbl, warn_tip, _, _) in self._mod_rows.items():
             mod_issues = issues.get(folder)
             if mod_issues:
                 warn_lbl.configure(text=f"⚠ {len(mod_issues)}")
-                warn_lbl.grid(row=0, column=2, rowspan=2, padx=(4, 4))
+                warn_lbl.grid(row=0, column=3, rowspan=2, padx=(4, 4))
                 warn_tip.update_text("\n".join(i.message for i in mod_issues))
             else:
                 warn_lbl.grid_remove()
@@ -384,7 +434,7 @@ class ModListPanel(ctk.CTkFrame):
     def set_updates(self, results: list[UpdateResult]) -> None:
         by_folder = {r.folder_name: r for r in results}
         self._update_folders = {r.folder_name for r in results if r.has_update}
-        for folder, (_, _, _, _, _, upd_btn, upd_tip) in self._mod_rows.items():
+        for folder, (_, _, _, _, _, _, _, upd_btn, upd_tip) in self._mod_rows.items():
             res = by_folder.get(folder)
             if res and res.has_update:
                 upd_btn.configure(
@@ -392,7 +442,7 @@ class ModListPanel(ctk.CTkFrame):
                     state="normal",
                     command=lambda r=res: self._trigger_update(r),
                 )
-                upd_btn.grid(row=0, column=3, rowspan=2, padx=(4, 4))
+                upd_btn.grid(row=0, column=4, rowspan=2, padx=(4, 4))
                 upd_tip.update_text(f"Click to update to v{res.latest_version}\n{res.url}")
             else:
                 upd_btn.grid_remove()
