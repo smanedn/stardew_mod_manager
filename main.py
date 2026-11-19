@@ -75,6 +75,7 @@ except ImportError:
 
 
 from src import __version__
+from src.core.asset_conflicts import detect_asset_conflicts, format_asset_conflicts
 from src.core.config import ConfigManager
 from src.core.coop_parity import (
     CoopParityReport,
@@ -1132,11 +1133,23 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         enabled = self.config_manager.get_enabled_mods(active)
         smapi_ver = get_installed_smapi_version(game_path)
         issues = analyze_mod_dependencies(self._current_mods, set(enabled), smapi_version=smapi_ver)
-        if issues:
-            summary = format_issue_summary(issues, self._current_mods)
+        conflicts = detect_asset_conflicts(self._current_mods, set(enabled))
+        if issues or conflicts:
+            sections: list[str] = []
+            if issues:
+                sections.append(
+                    "Dependency / Version Issues:\n"
+                    + format_issue_summary(issues, self._current_mods)
+                )
+            if conflicts:
+                sections.append(
+                    "Content Patcher Asset Conflicts:\n" + format_asset_conflicts(conflicts)
+                )
             proceed = messagebox.askyesno(
-                "Dependency / Conflict Warning",
-                f"Issues detected in modpack '{active}':\n\n{summary}\n\nLaunch SMAPI anyway?",
+                "Pre-Launch Warnings",
+                f"Issues detected in modpack '{active}':\n\n"
+                + "\n\n".join(sections)
+                + "\n\nLaunch SMAPI anyway?",
             )
             if not proceed:
                 return
