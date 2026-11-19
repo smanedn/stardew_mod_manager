@@ -35,6 +35,7 @@ class ProfileSidebar(ctk.CTkFrame):
         on_export_bundle: Callable[[], None] | None = None,
         on_import_bundle: Callable[[], None] | None = None,
         on_rename: Callable[[], None] | None = None,
+        on_coop_check: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -159,6 +160,10 @@ class ProfileSidebar(ctk.CTkFrame):
             ctk.CTkButton(actions, text="Export .zip", command=on_export_bundle, **btn_cfg).grid(
                 row=2, column=1, sticky="ew", padx=(3, 0), pady=2
             )
+        if on_coop_check is not None:
+            ctk.CTkButton(
+                actions, text="Co-op Parity Check", command=on_coop_check, **btn_cfg
+            ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 2))
 
         manage_row = ctk.CTkFrame(self, fg_color="transparent")
         manage_row.grid(row=5, column=0, sticky="ew", padx=SPACING["md"], pady=(2, 10))

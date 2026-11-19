@@ -76,6 +76,11 @@ except ImportError:
 
 from src import __version__
 from src.core.config import ConfigManager
+from src.core.coop_parity import (
+    CoopParityReport,
+    compare_with_friend_modlist,
+    load_friend_modlist,
+)
 from src.core.dependencies import (
     analyze_mod_dependencies,
     format_issue_summary,
@@ -104,6 +109,7 @@ from src.core.updater import (
     check_smapi_update,
     install_mod_update,
 )
+from src.ui.coop_parity_dialog import CoopParityDialog
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_details_dialog import ModDetailsDialog
 from src.ui.mod_list import ModListPanel
@@ -194,6 +200,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_open_settings=self._open_settings,
             on_theme_change=self._on_theme_changed,
             on_rename=self._rename_active_profile,
+            on_coop_check=self._coop_parity_check,
         )
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -518,6 +525,44 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         except OSError as exc:
             self.launch_bar.set_status(f"Export failed: {exc}", level="error")
 
+    def _coop_parity_check(self) -> None:
+        src = filedialog.askopenfilename(
+            title="Select Friend's Exported Modlist (.json)",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if not src:
+            return
+        try:
+            friend_name, friend_mods = load_friend_modlist(src)
+        except (OSError, ValueError) as exc:
+            self.launch_bar.set_status(f"Co-op check failed: {exc}", level="error")
+            return
+
+        active = self.config_manager.active_profile
+        enabled = set(self.config_manager.get_enabled_mods(active))
+        report = compare_with_friend_modlist(friend_name, friend_mods, self._current_mods, enabled)
+        CoopParityDialog(self, report=report, on_sync_toggles=self._apply_coop_sync)
+
+    def _apply_coop_sync(self, report: CoopParityReport) -> None:
+        active = self.config_manager.active_profile
+        current = set(self.config_manager.get_enabled_mods(active))
+        for mod in report.extra_mods:
+            current.discard(mod.folder_name)
+        for item in report.missing_mods:
+            if item.local_folder_if_installed:
+                current.add(item.local_folder_if_installed)
+
+        ordered = [m.folder_name for m in self._current_mods if m.folder_name in current]
+        self.config_manager.set_enabled_mods(ordered, active)
+        self.mod_list.sync_enabled(ordered)
+        self._refresh_profiles()
+        self._refresh_dependency_warnings(set(ordered))
+        self.launch_bar.set_status(
+            f"Synced local toggles to match '{report.friend_profile}'.",
+            level="success",
+            auto_clear_ms=4000,
+        )
+
     def _export_bundle(self) -> None:
         active = self.config_manager.active_profile
         profile_name = self.config_manager.profiles[active]["name"]
@@ -673,6 +718,44 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             )
         except OSError as exc:
             self.launch_bar.set_status(f"Export failed: {exc}", level="error")
+
+    def _coop_parity_check(self) -> None:
+        src = filedialog.askopenfilename(
+            title="Select Friend's Exported Modlist (.json)",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if not src:
+            return
+        try:
+            friend_name, friend_mods = load_friend_modlist(src)
+        except (OSError, ValueError) as exc:
+            self.launch_bar.set_status(f"Co-op check failed: {exc}", level="error")
+            return
+
+        active = self.config_manager.active_profile
+        enabled = set(self.config_manager.get_enabled_mods(active))
+        report = compare_with_friend_modlist(friend_name, friend_mods, self._current_mods, enabled)
+        CoopParityDialog(self, report=report, on_sync_toggles=self._apply_coop_sync)
+
+    def _apply_coop_sync(self, report: CoopParityReport) -> None:
+        active = self.config_manager.active_profile
+        current = set(self.config_manager.get_enabled_mods(active))
+        for mod in report.extra_mods:
+            current.discard(mod.folder_name)
+        for item in report.missing_mods:
+            if item.local_folder_if_installed:
+                current.add(item.local_folder_if_installed)
+
+        ordered = [m.folder_name for m in self._current_mods if m.folder_name in current]
+        self.config_manager.set_enabled_mods(ordered, active)
+        self.mod_list.sync_enabled(ordered)
+        self._refresh_profiles()
+        self._refresh_dependency_warnings(set(ordered))
+        self.launch_bar.set_status(
+            f"Synced local toggles to match '{report.friend_profile}'.",
+            level="success",
+            auto_clear_ms=4000,
+        )
 
     def _export_bundle(self) -> None:
         active = self.config_manager.active_profile
