@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-19
+
+### Added
+- **Full Modpack `.zip` Bundle Export/Import** (`src/core/modpack_bundle.py`): Package or import entire modpacks (mod folders, `config.json` tweaks, and enabled-mod state) as a single `.zip`.
+- **Update All (N) & SMAPI Update Indicator** (`src/core/updater.py`, `src/ui/mod_list.py`, `src/ui/top_bar.py`): Batch-update all eligible outdated mods in one click and display an `↑ SMAPI vX.Y.Z` indicator when a newer SMAPI release is available.
+- **Auto-Backup Saves & Modpack Rename** (`src/core/save_backup.py`, `src/core/config.py`, `src/ui/settings_dialog.py`): Optional automatic save backup before modded launches (retaining the newest 5 auto-backups) and **Rename** support for modpacks.
+- **`ContentPackFor` Dependency Detection** (`src/core/mod_scanner.py`, `src/ui/mod_details_dialog.py`): Treats `ContentPackFor` frameworks as required SMAPI dependencies.
+- **Quick Filter Chips** (`src/ui/mod_list.py`): Filter mods by `All`, `Enabled`, `Disabled`, `Issues ⚠`, or `Updates ↑`.
+- **`.rar` Archive Support & Steam/Custom Launch Options** (`src/core/mod_installer.py`, `src/core/launcher.py`, `src/ui/settings_dialog.py`): Added `.rar` extraction via `rarfile`, optional `steam://rungameid/413150` launch for Steam Overlay, and custom CLI launch arguments.
+
 ## [0.7.0] - 2026-11-18
 
 ### Changed

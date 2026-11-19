@@ -17,10 +17,11 @@ A lightweight desktop mod manager for **Stardew Valley** built with Python and `
 - **Instant Profile Switching:** Rebuilds `SVMM_Data/profiles/<ProfileName>/` and links `Stardew Valley/Mods` using directory junctions (`mklink /J` on Windows) or symlinks (macOS/Linux, experimental) with zero file copying.
 - **Safe Vanilla Launch:** Unlinks `Stardew Valley/Mods` and launches the base game (`Stardew Valley.exe`) without touching your mod files. Any pre-existing unmanaged `Mods` folder is safely backed up to `Mods_Backup`.
 - **Tolerant SMAPI Manifest Parser:** Reads `manifest.json` with UTF-8 BOM (`utf-8-sig`) support and safely handles comments and trailing commas.
-- **Dependency & Conflict Warnings:** Flags missing required `Dependencies` and duplicate `UniqueID`s (`⚠` + hover tooltip) and prompts for confirmation before launching SMAPI.
-- **Safe `.zip` Mod Installer:** Install single or multi-mod `.zip` archives directly into the active modpack with zip-slip path traversal protection.
-- **Mod Update Checker:** Checks `GitHub:owner/repo` `UpdateKeys` in the background with caching (`SVMM_Data/update_cache.json`) and graceful offline handling (optional `github_token` in `SVMM_Data/config.json`).
-- **Profile Import / Export / Duplicate & Theme Support:** Share or duplicate profile JSONs, switch between Dark / Light / System themes, and open `SMAPI-latest.txt` directly from the launch bar.
+- **Dependency & Conflict Warnings:** Flags missing required `Dependencies` and `ContentPackFor` frameworks, `MinimumVersion` / `MinimumApiVersion` mismatches, and duplicate `UniqueID`s (`⚠` + hover tooltip) with 1-click **Fix Deps** and pre-launch confirmation.
+- **Safe Archive Installer & Drag-and-Drop:** Install `.zip`, `.7z`, and `.rar` mod archives (via button or drag-and-drop) with zip-slip path traversal protection.
+- **Mod & SMAPI Update Checker:** Checks `GitHub:owner/repo` and `Nexus:<id>` `UpdateKeys` in the background with **1-Click Update**, **Update All**, TTL caching, and an automatic `↑ SMAPI` update indicator.
+- **Quick Filter Chips & Mod Details:** Filter by `All`, `Enabled`, `Disabled`, `Issues ⚠`, or `Updates ↑`, inspect full `manifest.json` metadata, edit per-mod `config.json`, or safely uninstall mods.
+- **Modpack Bundles, Save Backups & Steam Launch:** Export/import full modpack `.zip` bundles, duplicate/rename/share modlists, back up/restore `Saves` (with optional auto-backup before modded launch), view parsed `SMAPI-latest.txt` errors/warnings, and optionally launch via Steam or with custom CLI arguments.
 - **Double-Click Ready:** Running `main.py` directly on Windows automatically re-launches using `.venv` if present.
 
 ## Screenshots
@@ -116,21 +117,35 @@ stardew_mod_manager/
 │   ├── __init__.py              # Package version (__version__)
 │   ├── core/
 │   │   ├── __init__.py
-│   │   ├── config.py            # ConfigManager, validation, import/export/duplicate
-│   │   ├── dependencies.py      # Missing dependency and duplicate UniqueID detection
-│   │   ├── mod_installer.py     # Safe .zip extractor with zip-slip protection
-│   │   ├── mod_scanner.py       # Mod folder scanner and SMAPI manifest.json parser
-│   │   ├── mod_manager.py       # Profile junction/symlink sync and Mods_Backup handling
-│   │   ├── launcher.py          # Path validation, SMAPI log locator, and game launcher
-│   │   └── updater.py           # UpdateProvider interface, GitHub provider, and TTL cache
+│   │   ├── config.py            # ConfigManager, validation, import/export/duplicate/rename
+│   │   ├── dependencies.py      # Missing deps, ContentPackFor, min-version & ID conflicts
+│   │   ├── mod_config.py        # Per-mod config.json loader, validator, and formatter
+│   │   ├── mod_installer.py     # Safe .zip/.7z/.rar extractor and drag-and-drop parser
+│   │   ├── mod_scanner.py       # Recursive mod scanner and SMAPI manifest.json parser
+│   │   ├── mod_manager.py       # Profile junction/symlink sync, uninstall, Mods_Backup
+│   │   ├── modlist_export.py    # Shareable Markdown/JSON multiplayer modlist exporter
+│   │   ├── modpack_bundle.py    # Full modpack .zip bundle export and import
+│   │   ├── nexus_browser.py     # In-app Nexus Mods browser and GraphQL search
+│   │   ├── nexus_installer.py   # Nexus Mods API and nxm:// archive installer
+│   │   ├── nxm_handler.py       # Windows HKCU nxm:// protocol registration
+│   │   ├── save_backup.py       # Stardew Valley Saves .zip backup, restore, and pruning
+│   │   ├── smapi_log.py         # SMAPI-latest.txt error and warning log parser
+│   │   ├── launcher.py          # Path validation, SMAPI version, Steam/CLI launcher
+│   │   └── updater.py           # UpdateProvider interface, GitHub/Nexus/SMAPI updates
 │   └── ui/
 │       ├── __init__.py
 │       ├── theme.py             # Light/dark design tokens and typography
 │       ├── tooltip.py           # Hover tooltip widget for warnings and updates
-│       ├── top_bar.py           # Game path bar, validation status, and theme switcher
-│       ├── profile_sidebar.py   # Modpack list, create/duplicate/delete, import/export
-│       ├── mod_list.py          # Debounced search, cached rows, .zip install, updates
-│       └── launch_bar.py        # Modded/Vanilla launch, SMAPI log, version, status bar
+│       ├── top_bar.py           # Active modpack title, game path, SMAPI update badge
+│       ├── profile_sidebar.py   # Brand header, modpacks, bundle/JSON actions, utilities
+│       ├── mod_list.py          # Quick filter chips, mod cards, Fix Deps, Update All
+│       ├── mod_details_dialog.py # Manifest details, open folder, config edit, uninstall
+│       ├── mod_config_dialog.py # In-app JSON editor for per-mod config.json
+│       ├── nexus_dialog.py      # Nexus Mods browser with icons, pagination, 1-click install
+│       ├── save_backup_dialog.py # Save backup/restore manager dialog
+│       ├── settings_dialog.py   # API keys, Steam/CLI launch options, auto-backup, cache
+│       ├── smapi_log_dialog.py  # In-app SMAPI-latest.txt error/warning viewer
+│       └── launch_bar.py        # Status dock and Vanilla / SMAPI launch buttons
 └── tests/                       # Unit tests for core modules
 ```
 
