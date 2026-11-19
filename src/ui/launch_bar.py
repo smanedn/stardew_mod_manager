@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import webbrowser
 from collections.abc import Callable
 
 import customtkinter as ctk
@@ -37,6 +38,18 @@ class LaunchBar(ctk.CTkFrame):
         )
         self.status_label.grid(row=0, column=0, sticky="ew", padx=SPACING["md"], pady=SPACING["md"])
 
+        self.app_update_btn = ctk.CTkButton(
+            self,
+            text="",
+            height=26,
+            width=116,
+            font=font_small(),
+            fg_color=COLORS["accent_soft"],
+            hover_color=COLORS["accent"],
+            text_color=COLORS["text_primary"],
+            corner_radius=6,
+        )
+
         self.vanilla_btn = ctk.CTkButton(
             self,
             text="Launch Vanilla",
@@ -48,7 +61,7 @@ class LaunchBar(ctk.CTkFrame):
             text_color=COLORS["neutral_btn_text"],
             command=on_launch_vanilla,
         )
-        self.vanilla_btn.grid(row=0, column=1, padx=(SPACING["sm"], 6), pady=10)
+        self.vanilla_btn.grid(row=0, column=2, padx=(SPACING["sm"], 6), pady=10)
 
         self.modded_btn = ctk.CTkButton(
             self,
@@ -60,7 +73,17 @@ class LaunchBar(ctk.CTkFrame):
             hover_color=COLORS["success_hover"],
             command=on_launch_modded,
         )
-        self.modded_btn.grid(row=0, column=2, padx=(0, SPACING["md"]), pady=10)
+        self.modded_btn.grid(row=0, column=3, padx=(0, SPACING["md"]), pady=10)
+
+    def set_app_update(self, latest_version: str | None, url: str = "") -> None:
+        if latest_version:
+            self.app_update_btn.configure(
+                text=f"↑ SVMM v{latest_version}",
+                command=lambda u=url: webbrowser.open(u),
+            )
+            self.app_update_btn.grid(row=0, column=1, padx=(0, 6), pady=10)
+        else:
+            self.app_update_btn.grid_remove()
 
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"

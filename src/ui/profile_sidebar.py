@@ -41,6 +41,8 @@ class ProfileSidebar(ctk.CTkFrame):
         on_save_config_preset: Callable[[], None] | None = None,
         on_restore_config_preset: Callable[[], None] | None = None,
         on_open_asset_conflicts: Callable[[], None] | None = None,
+        on_open_trash: Callable[[], None] | None = None,
+        on_open_onboarding: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -68,6 +70,8 @@ class ProfileSidebar(ctk.CTkFrame):
         self._on_save_config_preset = on_save_config_preset
         self._on_restore_config_preset = on_restore_config_preset
         self._on_open_asset_conflicts = on_open_asset_conflicts
+        self._on_open_trash = on_open_trash
+        self._on_open_onboarding = on_open_onboarding
         self._on_open_saves = on_open_saves
         self._on_open_smapi_log = on_open_smapi_log
         self._on_coop_check = on_coop_check
@@ -258,6 +262,11 @@ class ProfileSidebar(ctk.CTkFrame):
             menu.add_command(label="Co-op Parity Check", command=self._on_coop_check)
         if self._on_open_asset_conflicts is not None:
             menu.add_command(label="Asset Conflict Scanner", command=self._on_open_asset_conflicts)
+        if self._on_open_trash is not None:
+            menu.add_command(label="Mod Trash Bin (Restore)", command=self._on_open_trash)
+        if self._on_open_onboarding is not None:
+            menu.add_separator()
+            menu.add_command(label="Quick Setup Wizard", command=self._on_open_onboarding)
         if self._on_open_modpack_folder is not None:
             menu.add_separator()
             menu.add_command(label="Open Modpack Folder", command=self._on_open_modpack_folder)

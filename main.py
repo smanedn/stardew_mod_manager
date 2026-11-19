@@ -75,6 +75,7 @@ except ImportError:
 
 
 from src import __version__
+from src.core.app_updater import check_svmm_update
 from src.core.asset_conflicts import detect_asset_conflicts, format_asset_conflicts
 from src.core.config import ConfigManager
 from src.core.config_presets import restore_config_preset, save_config_preset
@@ -96,7 +97,14 @@ from src.core.launcher import (
 )
 from src.core.mod_icons import extract_nexus_mod_id, fetch_nexus_mod_thumbnail, load_mod_icon
 from src.core.mod_installer import install_mod_archive, parse_dropped_archive_paths
-from src.core.mod_manager import link_game_mods, sync_profile, uninstall_mod, unlink_game_mods
+from src.core.mod_manager import (
+    TrashedMod,
+    link_game_mods,
+    restore_trashed_mod,
+    sync_profile,
+    uninstall_mod,
+    unlink_game_mods,
+)
 from src.core.mod_scanner import ModInfo, scan_mod_pool
 from src.core.modlist_export import export_modlist
 from src.core.modpack_bundle import export_modpack_bundle, import_modpack_bundle
@@ -126,12 +134,14 @@ from src.ui.launch_bar import LaunchBar
 from src.ui.mod_details_dialog import ModDetailsDialog
 from src.ui.mod_list import ModListPanel
 from src.ui.nexus_dialog import NexusBrowserDialog
+from src.ui.onboarding_dialog import OnboardingDialog
 from src.ui.profile_sidebar import ProfileSidebar
 from src.ui.save_backup_dialog import SaveBackupDialog
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.smapi_log_dialog import SmapiLogDialog
 from src.ui.theme import COLORS, SPACING, apply_theme
 from src.ui.top_bar import TopBar
+from src.ui.trash_dialog import TrashBinDialog
 
 MODPACKS_DIR = PROJECT_ROOT / "SVMM_Data" / "modpacks"
 PROFILES_DIR = PROJECT_ROOT / "SVMM_Data" / "profiles"
@@ -141,6 +151,7 @@ SMAPI_COMPAT_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "smapi_compat_cache.json"
 MOD_ICONS_DIR = PROJECT_ROOT / "SVMM_Data" / "mod_icons"
 CONFIG_PRESETS_DIR = PROJECT_ROOT / "SVMM_Data" / "config_presets"
 SMAPI_INSTALLER_DIR = PROJECT_ROOT / "SVMM_Data" / "smapi_installer"
+TRASH_DIR = PROJECT_ROOT / "SVMM_Data" / ".trash"
 SAVE_BACKUPS_DIR = PROJECT_ROOT / "SVMM_Data" / "save_backups"
 LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
 ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
@@ -193,6 +204,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self._validate_game_path(self.config_manager.game_path)
         self._refresh_profiles()
         self._refresh_mods()
+        self._check_svmm_update_async()
+        self._maybe_show_onboarding()
 
     def _build_layout(self) -> None:
         self.grid_columnconfigure(1, weight=1)
@@ -222,6 +235,8 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_save_config_preset=self._save_config_preset,
             on_restore_config_preset=self._restore_config_preset,
             on_open_asset_conflicts=self._open_asset_conflicts,
+            on_open_trash=self._open_trash_bin,
+            on_open_onboarding=self._open_onboarding,
         )
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -252,6 +267,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_update_all=self._update_all_mods,
             on_fix_deps=self._fix_missing_dependencies,
             on_check_compat=self._check_smapi_compat,
+            on_bulk_uninstall=self._bulk_uninstall_mods,
             icon_cache_dir=MOD_ICONS_DIR,
         )
         self.mod_list.grid(
@@ -429,6 +445,81 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
                 auto_clear_ms=4000,
             )
 
+    def _open_trash_bin(self) -> None:
+        TrashBinDialog(
+            self,
+            trash_root=TRASH_DIR,
+            on_restore=self._restore_trashed_mod,
+            on_emptied=lambda n: self.launch_bar.set_status(
+                f"Permanently deleted {n} mod(s) from Trash.",
+                level="info",
+                auto_clear_ms=4000,
+            ),
+        )
+
+    def _restore_trashed_mod(self, item: TrashedMod) -> None:
+        target_profile = (
+            item.profile_id
+            if item.profile_id in self.config_manager.profiles
+            else self.config_manager.active_profile
+        )
+        try:
+            restored_folder = restore_trashed_mod(item.entry_dir, MODPACKS_DIR / target_profile)
+        except (OSError, ValueError) as exc:
+            self.launch_bar.set_status(f"Restore failed: {exc}", level="error")
+            return
+
+        current = self.config_manager.get_enabled_mods(target_profile)
+        if restored_folder not in current:
+            self.config_manager.set_enabled_mods(current + [restored_folder], target_profile)
+        self._refresh_profiles()
+        if target_profile == self.config_manager.active_profile:
+            self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Restored '{restored_folder}' to modpack '{target_profile}'.",
+            level="success",
+            auto_clear_ms=4000,
+        )
+
+    def _maybe_show_onboarding(self) -> None:
+        has_vanilla, has_smapi, _ = validate_game_path(self.config_manager.game_path)
+        if not has_vanilla or not has_smapi:
+            self.after(350, self._open_onboarding)
+
+    def _open_onboarding(self) -> None:
+        OnboardingDialog(
+            self,
+            initial_path=self.config_manager.game_path,
+            initial_nexus_key=self.config_manager.nexus_api_key,
+            on_install_smapi=self._install_or_update_smapi,
+            on_finish=self._finish_onboarding,
+        )
+
+    def _finish_onboarding(self, game_path: str, nexus_key: str) -> None:
+        if game_path:
+            self.top_bar.set_path(game_path)
+            self._on_game_path_changed(game_path)
+        if nexus_key:
+            self.config_manager.nexus_api_key = nexus_key
+        self.launch_bar.set_status("Setup complete!", level="success", auto_clear_ms=4000)
+
+    def _check_svmm_update_async(self) -> None:
+        token = self.config_manager.github_token
+
+        def worker() -> None:
+            res = check_svmm_update(__version__, github_token=token)
+            if res is not None:
+                self.after(
+                    0,
+                    lambda: (
+                        self.launch_bar.set_app_update(res[0], res[1])
+                        if self.winfo_exists() and self.launch_bar.winfo_exists()
+                        else None
+                    ),
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _open_asset_conflicts(self) -> None:
         active = self.config_manager.active_profile
         enabled = set(self.config_manager.get_enabled_mods(active))
@@ -581,6 +672,12 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             except tk.TclError:
                 pass
             self.mod_list._search_after_id = None
+        if hasattr(self, "mod_list") and self.mod_list._icon_batch_after_id is not None:
+            try:
+                self.mod_list.after_cancel(self.mod_list._icon_batch_after_id)
+            except tk.TclError:
+                pass
+            self.mod_list._icon_batch_after_id = None
         if hasattr(self, "launch_bar") and self.launch_bar._toast_after_id is not None:
             try:
                 self.launch_bar.after_cancel(self.launch_bar._toast_after_id)
@@ -1372,6 +1469,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
                 self._active_modpack_dir(),
                 profiles_root=PROFILES_DIR,
                 profile_id=active,
+                trash_root=TRASH_DIR,
             )
         except (OSError, ValueError) as exc:
             self.launch_bar.set_status(f"Uninstall failed: {exc}", level="error")
@@ -1383,7 +1481,39 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
         self.config_manager.set_enabled_mods(remaining, active)
         self._refresh_mods()
         self.launch_bar.set_status(
-            f"Uninstalled '{mod.name}' from '{active}'.", level="success", auto_clear_ms=4000
+            f"Moved '{mod.name}' to Trash Bin (Tools ▾ → Mod Trash Bin to restore).",
+            level="success",
+            auto_clear_ms=5000,
+        )
+
+    def _bulk_uninstall_mods(self, mods: list[ModInfo]) -> None:
+        if not messagebox.askyesno(
+            "Uninstall Selected Mods",
+            f"Move {len(mods)} selected mod(s) to the Trash Bin?",
+        ):
+            return
+        active = self.config_manager.active_profile
+        modpack_dir = self._active_modpack_dir()
+        removed: set[str] = set()
+        for mod in mods:
+            try:
+                uninstall_mod(
+                    mod.folder_name,
+                    modpack_dir,
+                    profiles_root=PROFILES_DIR,
+                    profile_id=active,
+                    trash_root=TRASH_DIR,
+                )
+                removed.add(mod.folder_name)
+            except (OSError, ValueError):
+                pass
+        remaining = [m for m in self.config_manager.get_enabled_mods(active) if m not in removed]
+        self.config_manager.set_enabled_mods(remaining, active)
+        self._refresh_mods()
+        self.launch_bar.set_status(
+            f"Moved {len(removed)} mod(s) to Trash Bin.",
+            level="success",
+            auto_clear_ms=5000,
         )
 
     def _launch_modded(self) -> None:

@@ -34,6 +34,7 @@ class ModListPanel(ctk.CTkFrame):
         on_update_all: Callable[[], None] | None = None,
         on_fix_deps: Callable[[], None] | None = None,
         on_check_compat: Callable[[], None] | None = None,
+        on_bulk_uninstall: Callable[[list[ModInfo]], None] | None = None,
         icon_cache_dir: Path | None = None,
     ) -> None:
         super().__init__(
@@ -52,11 +53,15 @@ class ModListPanel(ctk.CTkFrame):
         self._on_check_compat = on_check_compat
         self._on_show_details = on_show_details
         self._on_update_mod = on_update_mod
+        self._on_bulk_uninstall = on_bulk_uninstall
         self._icon_cache_dir = icon_cache_dir or Path("SVMM_Data") / "mod_icons"
         self._mods: list[ModInfo] = []
         self._status_filter = "all"
         self._issue_folders: set[str] = set()
         self._update_folders: set[str] = set()
+        self._selected_folders: set[str] = set()
+        self._icon_batch_gen = 0
+        self._icon_batch_after_id: str | None = None
         # folder -> (card, img_lbl, ctk_img, switch, var,
         #            compat_lbl, compat_tip, warn_lbl, warn_tip, upd_btn, upd_tip)
         self._mod_rows: dict[
@@ -64,7 +69,7 @@ class ModListPanel(ctk.CTkFrame):
             tuple[
                 ctk.CTkFrame,
                 ctk.CTkLabel,
-                ctk.CTkImage,
+                ctk.CTkImage | None,
                 ctk.CTkSwitch,
                 ctk.BooleanVar,
                 ctk.CTkLabel,
@@ -155,6 +160,18 @@ class ModListPanel(ctk.CTkFrame):
             hover_color=COLORS["warning_text"],
             text_color=COLORS["warning_text"],
             command=on_fix_deps,
+        )
+
+        self.selected_btn = ctk.CTkButton(
+            top_toolbar,
+            text="Selected (0) ▾",
+            height=32,
+            width=112,
+            font=font_small(),
+            fg_color=COLORS["accent_soft"],
+            hover_color=COLORS["accent"],
+            text_color=COLORS["text_primary"],
+            command=self._show_selected_menu,
         )
 
         # --- Row 1: Filter Chips + Mod Count Pill ---
@@ -248,6 +265,15 @@ class ModListPanel(ctk.CTkFrame):
         self._mods = mods
         self._active_profile_name = active_profile
         enabled_set = set(enabled_mods)
+        self._selected_folders.clear()
+        self._update_selected_button()
+        self._icon_batch_gen += 1
+        if self._icon_batch_after_id is not None:
+            try:
+                self.after_cancel(self._icon_batch_after_id)
+            except tk.TclError:
+                pass
+            self._icon_batch_after_id = None
 
         for card, *_ in self._mod_rows.values():
             card.destroy()
@@ -263,12 +289,12 @@ class ModListPanel(ctk.CTkFrame):
                 border_color=COLORS["border"],
             )
             card.grid_columnconfigure(2, weight=1)
+            card.bind("<Button-1>", lambda e, f=mod.folder_name: self._on_card_click(f, e))
 
-            # Column 0: 42x42 Mod Thumbnail Image
-            pil_icon = load_mod_icon(mod, self._icon_cache_dir, size=84)
-            ctk_img = ctk.CTkImage(light_image=pil_icon, dark_image=pil_icon, size=(42, 42))
-            img_lbl = ctk.CTkLabel(card, text="", image=ctk_img, width=42, height=42)
+            # Column 0: 42x42 Mod Thumbnail Image (lazy-loaded in batches)
+            img_lbl = ctk.CTkLabel(card, text="", width=42, height=42)
             img_lbl.grid(row=0, column=0, rowspan=2, padx=(10, 6), pady=8)
+            img_lbl.bind("<Button-1>", lambda e, f=mod.folder_name: self._on_card_click(f, e))
 
             # Column 1: Enable/Disable Switch
             var = ctk.BooleanVar(value=mod.folder_name in enabled_set)
@@ -285,14 +311,17 @@ class ModListPanel(ctk.CTkFrame):
             # Column 2: Title + Version + Author / Folder
             title_row = ctk.CTkFrame(card, fg_color="transparent")
             title_row.grid(row=0, column=2, sticky="ew", padx=(0, 8), pady=(8, 0))
+            title_row.bind("<Button-1>", lambda e, f=mod.folder_name: self._on_card_click(f, e))
 
-            ctk.CTkLabel(
+            name_lbl = ctk.CTkLabel(
                 title_row,
                 text=mod.name,
                 font=font_bold(),
                 text_color=COLORS["warning_text"] if mod.error else COLORS["text_primary"],
                 anchor="w",
-            ).pack(side="left")
+            )
+            name_lbl.pack(side="left")
+            name_lbl.bind("<Button-1>", lambda e, f=mod.folder_name: self._on_card_click(f, e))
 
             ctk.CTkLabel(
                 title_row,
@@ -314,13 +343,15 @@ class ModListPanel(ctk.CTkFrame):
                 ).pack(side="left", padx=(8, 0))
 
             sub_text = mod.folder_name if not mod.error else f"{mod.folder_name}  •  {mod.error}"
-            ctk.CTkLabel(
+            sub_lbl = ctk.CTkLabel(
                 card,
                 text=sub_text,
                 font=font_small(),
                 text_color=COLORS["warning_text"] if mod.error else COLORS["text_muted"],
                 anchor="w",
-            ).grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=(0, 8))
+            )
+            sub_lbl.grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=(0, 8))
+            sub_lbl.bind("<Button-1>", lambda e, f=mod.folder_name: self._on_card_click(f, e))
 
             # Right badges + Details button
             compat_lbl = ctk.CTkLabel(
@@ -374,7 +405,7 @@ class ModListPanel(ctk.CTkFrame):
             self._mod_rows[mod.folder_name] = (
                 card,
                 img_lbl,
-                ctk_img,
+                None,
                 switch,
                 var,
                 compat_lbl,
@@ -386,6 +417,102 @@ class ModListPanel(ctk.CTkFrame):
             )
 
         self._apply_filter()
+        if mods:
+            self._load_icon_batch(mods, 0, self._icon_batch_gen)
+
+    def _load_icon_batch(
+        self, mods: list[ModInfo], start_idx: int, generation: int, batch_size: int = 12
+    ) -> None:
+        if generation != self._icon_batch_gen or not self.winfo_exists():
+            return
+        end_idx = min(start_idx + batch_size, len(mods))
+        for mod in mods[start_idx:end_idx]:
+            pil_icon = load_mod_icon(mod, self._icon_cache_dir, size=84)
+            self.update_mod_icon(mod.folder_name, pil_icon)
+        if end_idx < len(mods):
+            self._icon_batch_after_id = self.after(
+                10, lambda: self._load_icon_batch(mods, end_idx, generation, batch_size)
+            )
+        else:
+            self._icon_batch_after_id = None
+
+    def _on_card_click(self, folder_name: str, event: tk.Event[tk.Misc]) -> None:
+        ctrl = bool(getattr(event, "state", 0) & 0x0004)
+        if ctrl:
+            if folder_name in self._selected_folders:
+                self._selected_folders.discard(folder_name)
+            else:
+                self._selected_folders.add(folder_name)
+        else:
+            if self._selected_folders == {folder_name}:
+                self._selected_folders.clear()
+            else:
+                self._selected_folders = {folder_name}
+        self._refresh_card_selection_styles()
+        self._update_selected_button()
+
+    def _refresh_card_selection_styles(self) -> None:
+        for folder, row in self._mod_rows.items():
+            card = row[0]
+            if not card.winfo_exists():
+                continue
+            is_sel = folder in self._selected_folders
+            card.configure(
+                border_color=COLORS["accent"] if is_sel else COLORS["border"],
+                border_width=2 if is_sel else 1,
+            )
+
+    def _update_selected_button(self) -> None:
+        count = len(self._selected_folders)
+        if count > 0:
+            self.selected_btn.configure(text=f"Selected ({count}) ▾")
+            self.selected_btn.grid(row=0, column=6, padx=(6, 0))
+        else:
+            self.selected_btn.grid_remove()
+
+    def _show_selected_menu(self) -> None:
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        bg = COLORS["surface"][1] if is_dark else COLORS["surface"][0]
+        fg = COLORS["text_primary"][1] if is_dark else COLORS["text_primary"][0]
+        menu = tk.Menu(
+            self,
+            tearoff=0,
+            bg=bg,
+            fg=fg,
+            activebackground=COLORS["accent"][0],
+            activeforeground="#FFFFFF",
+            relief="flat",
+            bd=1,
+        )
+        menu.add_command(label="Enable Selected", command=lambda: self._bulk_set_enabled(True))
+        menu.add_command(label="Disable Selected", command=lambda: self._bulk_set_enabled(False))
+        if self._on_bulk_uninstall is not None:
+            menu.add_separator()
+            menu.add_command(label="Uninstall Selected", command=self._bulk_uninstall)
+        menu.add_separator()
+        menu.add_command(label="Clear Selection", command=self._clear_selection)
+
+        x = self.selected_btn.winfo_rootx()
+        y = self.selected_btn.winfo_rooty() + self.selected_btn.winfo_height() + 2
+        menu.tk_popup(x, y)
+
+    def _bulk_set_enabled(self, enabled: bool) -> None:
+        for folder in self._selected_folders:
+            if folder in self._mod_rows:
+                self._mod_rows[folder][4].set(enabled)
+        self._emit_toggle()
+
+    def _bulk_uninstall(self) -> None:
+        if self._on_bulk_uninstall is None:
+            return
+        targets = [m for m in self._mods if m.folder_name in self._selected_folders]
+        if targets:
+            self._on_bulk_uninstall(targets)
+
+    def _clear_selection(self) -> None:
+        self._selected_folders.clear()
+        self._refresh_card_selection_styles()
+        self._update_selected_button()
 
     def update_mod_icon(self, folder_name: str, pil_image: Image.Image) -> None:
         """Update a mod card's thumbnail image after an async fetch."""

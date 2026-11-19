@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import stat
 import subprocess
 import sys
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 
@@ -170,13 +173,24 @@ def unlink_game_mods(game_path: str | Path) -> tuple[bool, str]:
     return True, "No Mods folder to unlink."
 
 
+@dataclass(frozen=True)
+class TrashedMod:
+    """Metadata for a mod moved to SVMM's trash bin."""
+
+    entry_dir: Path
+    folder_name: str
+    profile_id: str
+    trashed_at: str
+
+
 def uninstall_mod(
     mod_folder: str,
     modpack_dir: str | Path,
     profiles_root: str | Path | None = None,
     profile_id: str | None = None,
-) -> None:
-    """Safely remove a mod folder from modpack_dir and unlink it from the profile."""
+    trash_root: str | Path | None = None,
+) -> Path | None:
+    """Safely remove a mod folder (moving to trash_root if given) and unlink from profile."""
     pack_root = Path(modpack_dir).resolve()
     target = (pack_root / mod_folder).resolve()
     if target == pack_root or not target.is_relative_to(pack_root):
@@ -184,7 +198,24 @@ def uninstall_mod(
     if not target.exists():
         raise FileNotFoundError(f"Mod folder not found: {target}")
 
-    shutil.rmtree(target)
+    trashed_entry: Path | None = None
+    if trash_root is not None:
+        trash_dir = Path(trash_root)
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        safe_name = mod_folder.replace("/", "__").replace("\\", "__")
+        entry_dir = trash_dir / f"{stamp}__{safe_name}"
+        entry_dir.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(target), str(entry_dir / "mod"))
+        meta = {
+            "folder_name": mod_folder,
+            "profile_id": profile_id or "Default",
+            "trashed_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        (entry_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        trashed_entry = entry_dir
+    else:
+        shutil.rmtree(target)
 
     # Clean up empty intermediate parent folders for nested mods
     parent = target.parent
@@ -198,3 +229,79 @@ def uninstall_mod(
         profile_link = Path(profiles_root) / profile_id / mod_folder
         if _is_link_or_junction(profile_link):
             _remove_link_or_junction(profile_link)
+
+    return trashed_entry
+
+
+def list_trashed_mods(trash_root: str | Path) -> list[TrashedMod]:
+    """Return trashed mods ordered newest-first."""
+    root = Path(trash_root)
+    if not root.is_dir():
+        return []
+
+    items: list[TrashedMod] = []
+    for entry in sorted(root.iterdir(), key=lambda p: p.name, reverse=True):
+        if not entry.is_dir() or not (entry / "mod").is_dir():
+            continue
+        meta_file = entry / "meta.json"
+        folder_name = entry.name
+        profile_id = "Default"
+        trashed_at = ""
+        if meta_file.is_file():
+            try:
+                data = json.loads(meta_file.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    folder_name = str(data.get("folder_name") or folder_name)
+                    profile_id = str(data.get("profile_id") or profile_id)
+                    trashed_at = str(data.get("trashed_at") or "")
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
+        items.append(
+            TrashedMod(
+                entry_dir=entry,
+                folder_name=folder_name,
+                profile_id=profile_id,
+                trashed_at=trashed_at,
+            )
+        )
+    return items
+
+
+def restore_trashed_mod(entry_dir: str | Path, modpack_dir: str | Path) -> str:
+    """Restore a trashed mod folder back into modpack_dir and return its folder_name."""
+    entry = Path(entry_dir)
+    mod_src = entry / "mod"
+    if not mod_src.is_dir():
+        raise FileNotFoundError(f"Trashed mod payload missing: {entry}")
+
+    folder_name = entry.name
+    meta_file = entry / "meta.json"
+    if meta_file.is_file():
+        data = json.loads(meta_file.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and data.get("folder_name"):
+            folder_name = str(data["folder_name"])
+
+    pack_root = Path(modpack_dir).resolve()
+    dest = (pack_root / folder_name).resolve()
+    if dest == pack_root or not dest.is_relative_to(pack_root):
+        raise ValueError(f"Unsafe restore path: {folder_name}")
+    if dest.exists():
+        raise FileExistsError(f"Mod '{folder_name}' already exists in this modpack.")
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(mod_src), str(dest))
+    shutil.rmtree(entry, ignore_errors=True)
+    return folder_name
+
+
+def empty_trash(trash_root: str | Path) -> int:
+    """Permanently delete all entries in trash_root and return count removed."""
+    root = Path(trash_root)
+    if not root.is_dir():
+        return 0
+    removed = 0
+    for entry in list(root.iterdir()):
+        if entry.is_dir():
+            shutil.rmtree(entry, ignore_errors=True)
+            removed += 1
+    return removed
