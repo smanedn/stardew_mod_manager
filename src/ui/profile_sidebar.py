@@ -37,6 +37,10 @@ class ProfileSidebar(ctk.CTkFrame):
         on_rename: Callable[[], None] | None = None,
         on_coop_check: Callable[[], None] | None = None,
         on_open_modpack_folder: Callable[[], None] | None = None,
+        on_create_shortcut: Callable[[], None] | None = None,
+        on_save_config_preset: Callable[[], None] | None = None,
+        on_restore_config_preset: Callable[[], None] | None = None,
+        on_open_asset_conflicts: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -60,6 +64,10 @@ class ProfileSidebar(ctk.CTkFrame):
         self._on_import_bundle = on_import_bundle
         self._on_rename = on_rename
         self._on_open_modpack_folder = on_open_modpack_folder
+        self._on_create_shortcut = on_create_shortcut
+        self._on_save_config_preset = on_save_config_preset
+        self._on_restore_config_preset = on_restore_config_preset
+        self._on_open_asset_conflicts = on_open_asset_conflicts
         self._on_open_saves = on_open_saves
         self._on_open_smapi_log = on_open_smapi_log
         self._on_coop_check = on_coop_check
@@ -225,6 +233,15 @@ class ProfileSidebar(ctk.CTkFrame):
             menu.add_separator()
             menu.add_command(label="Import Modpack Bundle (.zip)", command=self._on_import_bundle)
             menu.add_command(label="Export Modpack Bundle (.zip)", command=self._on_export_bundle)
+        if self._on_save_config_preset is not None and self._on_restore_config_preset is not None:
+            menu.add_separator()
+            menu.add_command(label="Save Mod Configs Snapshot", command=self._on_save_config_preset)
+            menu.add_command(
+                label="Restore Mod Configs Snapshot", command=self._on_restore_config_preset
+            )
+        if self._on_create_shortcut is not None:
+            menu.add_separator()
+            menu.add_command(label="Create Desktop Shortcut", command=self._on_create_shortcut)
         if self._on_open_modpack_folder is not None:
             menu.add_separator()
             menu.add_command(label="Open Modpack Folder", command=self._on_open_modpack_folder)
@@ -239,6 +256,8 @@ class ProfileSidebar(ctk.CTkFrame):
         menu.add_command(label="SMAPI Log Analyzer", command=self._on_open_smapi_log)
         if self._on_coop_check is not None:
             menu.add_command(label="Co-op Parity Check", command=self._on_coop_check)
+        if self._on_open_asset_conflicts is not None:
+            menu.add_command(label="Asset Conflict Scanner", command=self._on_open_asset_conflicts)
         if self._on_open_modpack_folder is not None:
             menu.add_separator()
             menu.add_command(label="Open Modpack Folder", command=self._on_open_modpack_folder)

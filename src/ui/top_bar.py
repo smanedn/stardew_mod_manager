@@ -20,6 +20,7 @@ class TopBar(ctk.CTkFrame):
         on_path_change: Callable[[str], None],
         on_browse: Callable[[], None],
         on_open_modpack: Callable[[], None] | None = None,
+        on_install_smapi: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -30,6 +31,7 @@ class TopBar(ctk.CTkFrame):
         )
         self._on_path_change = on_path_change
         self._on_open_modpack = on_open_modpack
+        self._on_install_smapi = on_install_smapi
         self.grid_columnconfigure(1, weight=1)
 
         # --- Row 0: Active Modpack Title + Live Game Status Pill ---
@@ -144,12 +146,23 @@ class TopBar(ctk.CTkFrame):
         else:
             color = COLORS["error_text"]
         self.validation_label.configure(text=f"● {message}", text_color=color)
+        if not has_smapi and has_vanilla and self._on_install_smapi is not None:
+            self.smapi_update_btn.configure(
+                text="↓ Install SMAPI",
+                command=self._on_install_smapi,
+            )
+            self.smapi_update_btn.grid(row=0, column=1, padx=(0, 8), sticky="e")
 
     def set_smapi_update(self, latest_version: str | None, url: str = "") -> None:
         if latest_version:
+            cmd = (
+                self._on_install_smapi
+                if self._on_install_smapi is not None
+                else (lambda u=url or "https://smapi.io/": webbrowser.open(u))
+            )
             self.smapi_update_btn.configure(
                 text=f"↑ SMAPI v{latest_version}",
-                command=lambda u=url or "https://smapi.io/": webbrowser.open(u),
+                command=cmd,
             )
             self.smapi_update_btn.grid(row=0, column=1, padx=(0, 8), sticky="e")
         else:

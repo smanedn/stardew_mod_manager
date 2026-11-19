@@ -77,6 +77,7 @@ except ImportError:
 from src import __version__
 from src.core.asset_conflicts import detect_asset_conflicts, format_asset_conflicts
 from src.core.config import ConfigManager
+from src.core.config_presets import restore_config_preset, save_config_preset
 from src.core.coop_parity import (
     CoopParityReport,
     compare_with_friend_modlist,
@@ -103,7 +104,13 @@ from src.core.nexus_installer import NexusForbiddenError, install_from_nexus
 from src.core.nxm_handler import build_nxm_command, register_nxm_protocol
 from src.core.save_backup import create_save_backup, get_default_saves_dir, prune_auto_backups
 from src.core.save_binding import list_farm_saves
+from src.core.shortcuts import create_modpack_shortcut
 from src.core.smapi_compat import SmapiCompatInfo, check_smapi_compatibility
+from src.core.smapi_installer import (
+    download_and_extract_smapi,
+    fetch_latest_smapi_release,
+    launch_smapi_installer,
+)
 from src.core.updater import (
     GitHubUpdateProvider,
     NexusUpdateProvider,
@@ -113,6 +120,7 @@ from src.core.updater import (
     check_smapi_update,
     install_mod_update,
 )
+from src.ui.asset_conflict_dialog import AssetConflictDialog
 from src.ui.coop_parity_dialog import CoopParityDialog
 from src.ui.launch_bar import LaunchBar
 from src.ui.mod_details_dialog import ModDetailsDialog
@@ -131,6 +139,8 @@ CONFIG_FILE = PROJECT_ROOT / "SVMM_Data" / "config.json"
 UPDATE_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "update_cache.json"
 SMAPI_COMPAT_CACHE_FILE = PROJECT_ROOT / "SVMM_Data" / "smapi_compat_cache.json"
 MOD_ICONS_DIR = PROJECT_ROOT / "SVMM_Data" / "mod_icons"
+CONFIG_PRESETS_DIR = PROJECT_ROOT / "SVMM_Data" / "config_presets"
+SMAPI_INSTALLER_DIR = PROJECT_ROOT / "SVMM_Data" / "smapi_installer"
 SAVE_BACKUPS_DIR = PROJECT_ROOT / "SVMM_Data" / "save_backups"
 LOGO_FILE = BUNDLE_DIR / "assets" / "logo.png"
 ICON_FILE = BUNDLE_DIR / "assets" / "logo.ico"
@@ -208,6 +218,10 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             on_rename=self._rename_active_profile,
             on_coop_check=self._coop_parity_check,
             on_open_modpack_folder=self._open_modpack_folder,
+            on_create_shortcut=self._create_modpack_shortcut,
+            on_save_config_preset=self._save_config_preset,
+            on_restore_config_preset=self._restore_config_preset,
+            on_open_asset_conflicts=self._open_asset_conflicts,
         )
         self.sidebar.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -216,6 +230,7 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
             initial_path=self.config_manager.game_path,
             on_path_change=self._on_game_path_changed,
             on_browse=self._browse_game_path,
+            on_install_smapi=self._install_or_update_smapi,
         )
         self.top_bar.grid(
             row=0,
@@ -371,6 +386,113 @@ class SVModManagerApp(ctk.CTk, TkinterDnD.DnDWrapper):  # type: ignore[misc]
 
     def _open_modpack_folder(self) -> None:
         _open_in_file_manager(self._active_modpack_dir())
+
+    def _create_modpack_shortcut(self) -> None:
+        active = self.config_manager.active_profile
+        profile_name = self.config_manager.profiles[active]["name"]
+        try:
+            shortcut = create_modpack_shortcut(
+                active,
+                shortcut_name=f"Stardew - {profile_name}",
+                icon_path=ICON_FILE if ICON_FILE.is_file() else None,
+            )
+            self.launch_bar.set_status(
+                f"Created Desktop shortcut: {shortcut.name}",
+                level="success",
+                auto_clear_ms=5000,
+            )
+        except OSError as exc:
+            self.launch_bar.set_status(f"Shortcut failed: {exc}", level="error")
+
+    def _save_config_preset(self) -> None:
+        active = self.config_manager.active_profile
+        count = save_config_preset(self._active_modpack_dir(), CONFIG_PRESETS_DIR / active)
+        self.launch_bar.set_status(
+            f"Saved {count} mod config.json snapshot(s) for '{active}'.",
+            level="success" if count else "warning",
+            auto_clear_ms=4000,
+        )
+
+    def _restore_config_preset(self) -> None:
+        active = self.config_manager.active_profile
+        count = restore_config_preset(self._active_modpack_dir(), CONFIG_PRESETS_DIR / active)
+        if count:
+            self.launch_bar.set_status(
+                f"Restored {count} mod config.json snapshot(s) for '{active}'.",
+                level="success",
+                auto_clear_ms=4000,
+            )
+        else:
+            self.launch_bar.set_status(
+                f"No saved config.json snapshot found for '{active}'.",
+                level="warning",
+                auto_clear_ms=4000,
+            )
+
+    def _open_asset_conflicts(self) -> None:
+        active = self.config_manager.active_profile
+        enabled = set(self.config_manager.get_enabled_mods(active))
+        conflicts = detect_asset_conflicts(self._current_mods, enabled)
+        AssetConflictDialog(
+            self,
+            conflicts=conflicts,
+            on_disable_mod=self._disable_mod_from_conflict,
+            on_open_details=self._show_mod_details,
+        )
+
+    def _disable_mod_from_conflict(self, mod: ModInfo) -> None:
+        active = self.config_manager.active_profile
+        current = self.config_manager.get_enabled_mods(active)
+        updated = [m for m in current if m != mod.folder_name]
+        self.config_manager.set_enabled_mods(updated, active)
+        self.mod_list.sync_enabled(updated)
+        self._refresh_profiles()
+        self._refresh_dependency_warnings(set(updated))
+        self.launch_bar.set_status(
+            f"Disabled '{mod.name}' to resolve asset conflict.",
+            level="info",
+            auto_clear_ms=4000,
+        )
+
+    def _install_or_update_smapi(self) -> None:
+        token = self.config_manager.github_token
+        self.launch_bar.set_status("Fetching latest SMAPI release...", level="info")
+
+        def worker() -> None:
+            rel = fetch_latest_smapi_release(github_token=token)
+            if rel is None:
+                self.after(
+                    0,
+                    lambda: (
+                        self.launch_bar.set_status(
+                            "Could not reach GitHub; opening smapi.io...", level="warning"
+                        ),
+                        webbrowser.open("https://smapi.io/"),
+                    ),
+                )
+                return
+            try:
+                installer_dir = download_and_extract_smapi(rel.download_url, SMAPI_INSTALLER_DIR)
+                ok, msg = launch_smapi_installer(installer_dir)
+                err = None if ok else msg
+            except (OSError, ValueError) as exc:
+                err = str(exc)
+            self.after(0, lambda: self._on_smapi_installer_launched(rel.version, err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_smapi_installer_launched(self, version: str, err: str | None) -> None:
+        if not self.winfo_exists():
+            return
+        if err is None:
+            self.launch_bar.set_status(
+                f"Launched SMAPI v{version} installer — complete it, then click Refresh.",
+                level="success",
+                auto_clear_ms=7000,
+            )
+            self.after(4000, lambda: self._validate_game_path(self.config_manager.game_path))
+        else:
+            self.launch_bar.set_status(f"SMAPI installer failed: {err}", level="error")
 
     def _open_smapi_log(self) -> None:
         log_path = get_smapi_log_path()
@@ -1370,6 +1492,29 @@ def main() -> None:
             )
         except (OSError, ValueError) as exc:
             nxm_status = (f"nxm:// install failed: {exc}", "error")
+
+    if len(sys.argv) > 2 and sys.argv[1] == "--launch-profile":
+        target_profile = sys.argv[2]
+        cfg = ConfigManager(CONFIG_FILE)
+        if target_profile in cfg.profiles:
+            cfg.active_profile = target_profile
+            enabled = cfg.get_enabled_mods(target_profile)
+            profile_dir = sync_profile(
+                target_profile, enabled, MODPACKS_DIR / target_profile, PROFILES_DIR
+            )
+            ok, msg = link_game_mods(cfg.game_path, profile_dir)
+            if ok:
+                ok, msg = launch_game(
+                    cfg.game_path,
+                    modded=True,
+                    launch_args=cfg.launch_args,
+                    launch_via_steam=cfg.launch_via_steam,
+                )
+            if ok:
+                return
+            nxm_status = (f"Shortcut launch failed: {msg}", "error")
+        else:
+            nxm_status = (f"Modpack '{target_profile}' not found.", "error")
 
     app = SVModManagerApp()
     if nxm_status is not None:
